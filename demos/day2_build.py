@@ -1,3 +1,4 @@
+# Demo: a coding agent that builds and runs code, then refuses a dangerous command.
 """Day 2 demo — an agent with hands: read, write, edit, run, in a sandbox.
 
 Concept: give the loop the six core tools over a scratch directory and a Policy
