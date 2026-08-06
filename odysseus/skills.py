@@ -1,3 +1,4 @@
+# On-demand procedures loaded from skills/<name>/SKILL.md files.
 """Day 3 — skills: procedural knowledge the agent loads on demand.
 
 Concept: a skill is a folder under skills/<name>/ holding a SKILL.md — a written

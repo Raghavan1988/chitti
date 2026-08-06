@@ -1,3 +1,4 @@
+# The Tool type, the @tool decorator, and the six core file/shell tools.
 """Day 2 — tools: the hands of the agent.
 
 Concept: a tool is any object the loop can call — .spec (the schema the model

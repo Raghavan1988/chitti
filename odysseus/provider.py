@@ -1,3 +1,4 @@
+# The Gemini client: the only file that speaks HTTP and vendor wire format.
 """Day 1 — the provider: the single seam between Odysseus and the model.
 
 Concept: every other file in the harness speaks a small, neutral message

@@ -1,3 +1,4 @@
+# The Policy and deny rules that gate every tool call before it runs.
 """Day 2 — security: the policy the loop consults before every tool.
 
 Concept: the loop already has a before_tool socket. This file fills it with a

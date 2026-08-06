@@ -1,3 +1,4 @@
+# The base system prompt and durable ODYSSEUS.md project memory.
 """Day 3 — memory: who the agent is, and what it must not forget.
 
 Concept: two jobs live here. The base system prompt gives Odysseus its
