@@ -1,3 +1,4 @@
+# Demo: the smallest complete agent — a dice-rolling tool through one loop.
 """Day 1 demo — the smallest complete agent: one tool, one loop, one answer.
 
 Concept: a tool is just an object with two attributes — .spec, the schema the
