@@ -1,3 +1,4 @@
+# Demo: compaction, cross-conversation memory, and a voice-changing skill.
 """Day 3 demo — context, memory, and skills, on the same day-1 loop.
 
 Concept: three seams light up at once. compact() rides the before_turn socket to
