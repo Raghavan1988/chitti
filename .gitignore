@@ -2,3 +2,4 @@ odyssseus_api.sh
 __pycache__/
 *.pyc
 .DS_Store
+.odysseus/
