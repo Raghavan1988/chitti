@@ -1,3 +1,4 @@
+# The agent loop: call model, run the tools it asks for, repeat until an answer.
 """Day 1 — the agent loop: turn a model into an agent.
 
 Concept: an agent is a conversation that runs itself. The loop calls the
