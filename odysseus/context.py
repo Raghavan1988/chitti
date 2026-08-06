@@ -1,3 +1,4 @@
+# Token estimation and conversation compaction to stay within the context window.
 """Day 3 — context: keep the conversation inside the model's window.
 
 Concept: a long agent run grows an unbounded message list; eventually it will
