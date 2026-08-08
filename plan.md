@@ -1,8 +1,14 @@
-# Plan: iPhone Harness (Chitti Mobile)
+# Plan: SignalLoop
 
-A plan to build an **agent harness for iPhone** — voice + chat — that does tasks **Siri is weak at**: multi-step work across *your* services, with judgment, durable memory, and confirm-before-write policy.
+A **Siri-complemented, iPhone-native agent harness** for **multi-day loops that matter**—**career** and **life**—so ambitious people can break into frontier-shaped work without dropping real-world open loops.
 
-This plan reuses the mental model of **Odysseus** (`odysseus/` in this repo): provider, loop, tools, policy, context, memory, skills, session, subagent, harness. The hands change; the organs stay the same.
+**Product one-liner:**  
+> Siri executes requests. SignalLoop pursues objectives—professional and personal—on the phone, with approvals.
+
+**Stack one-liner:**  
+> Odysseus-shaped harness organs (loop, tools, policy, memory, skills, session); SignalLoop hands and product model (`Loop` objects). Compute on iPhone except LLM + unavoidable cloud APIs. **No Mac bridge.**
+
+This repo still contains **Odysseus** (coding harness) and a **mobile server/iOS shell** (`server/`, `mobile/ios/`). SignalLoop is the **product north star** those pieces evolve toward.
 
 ---
 
@@ -10,399 +16,261 @@ This plan reuses the mental model of **Odysseus** (`odysseus/` in this repo): pr
 
 ### What we are building
 
-An iPhone app that is a **personal ops agent**:
+**SignalLoop** — one app, one primitive:
 
-- **Chat** and **push-to-talk voice** as the UI (not always-on “Hey …” — that is Siri’s surface).
-- A real **agent loop**: model → tools → results → repeat until a final answer.
-- **Tools** into systems Siri does not run well (or at all) for *your* stack: email drafts, calendar planning with constraints, notes, web research, custom APIs, optional desktop/home Odysseus.
-- **Policy**: read freely; writes as drafts; irreversible actions need explicit user approval.
-- **Memory + sessions**: facts and conversations survive restarts.
+| Term | Meaning |
+|------|---------|
+| **Signal** | Something that showed up and matters (role, paper, email, bill, promise, onsite week) |
+| **Loop** | Durable multi-day objective: research → act → wait → follow up → done |
+
+Each loop has `domain`: **`career` | `life` | `both`**.
+
+| Career loops | Life loops | Both |
+|--------------|------------|------|
+| Track lab/role, ship weekly proof | Billing, lease, visa, health admin | Onsite week = interview prep + travel + home logistics |
+| Artifact + approved outreach | Dispute drafts + deadlines | Referral coffee + personal story prep |
+
+**Not** a second Siri. **Not** a Mac remote. **Not** spam auto-DM.
+
+### Coexistence with Siri
+
+| Siri owns | SignalLoop owns |
+|-----------|-----------------|
+| Language, disambiguation, system reach | Objectives, memory, multi-tool plan |
+| Short App Intent turns | Minutes→days state machine |
+| Timers, calls, HomeKit, OS privileges | Gmail/GitHub/web tools *you* connect |
+| Start / status / approve by voice | Policy, retries, event log, learning |
+
+**Bridge:** [App Intents](https://developer.apple.com/documentation/appintents) — parameters, entities, dialog/snippets. No private “query Siri for all phone data” API.
 
 ### What we are *not* building
 
-| Out of scope (v1–v2) | Why |
-|----------------------|-----|
-| Replacing Siri for timers / calls / HomeKit | Siri has OS privilege; we lose |
-| Always-on wake word | Platform + battery + App Store |
-| Unrestricted UI automation of arbitrary apps | Not App Store–viable |
-| Full on-device coding agent (`bash` / free filesystem) | iOS sandbox; different product (keep Odysseus on Mac/server) |
-| “General AGI phone” | Focus on a sharp job-to-be-done |
+| Out of scope | Why |
+|--------------|-----|
+| Compete with Siri OS control | Wrong privilege surface |
+| iPhone → Mac / desktop-use node | Explicit product constraint |
+| Read all notifications / Messages DB | Not available / not respectable |
+| Mass outreach / ungated send | Trust + bans |
+| Full paper training on device | Phone is control plane, not GPU cluster |
+| General AGI chat app | Sharp loop OS, not chatbot |
 
-### Siri test (feature gate)
+### Feature gate
 
-Ship a feature only if a user who already has Siri + ChatGPT would still open this app:
+Ship only if someone with **Siri + ChatGPT** still needs SignalLoop:
 
-> Multi-step + connected accounts + memory + approval beats a one-shot OS command.
+> Multi-day **state**, **connectors**, **approvals**, and **career+life loops in one graph**.
 
-### v1 job-to-be-done (locked for plan)
+### Positioning
 
-**Morning / day prep agent** for one person (you first):
+> Professionals don’t fail only from lack of ambition—they fail from **open loops**.  
+> SignalLoop runs the important ones: **break-in work** and **life that must not drop.**
 
-> “Look at my next 48 hours and open loops; propose a plan; draft messages and calendar changes; execute only what I approve.”
-
-Later verticals (work ops, expenses, trip planner) reuse the same harness with new tools/skills.
+Lead brand with **career systems** (frontier-shaped proof + opportunities). Personal = **capacity & continuity**, not “AI life coach.”
 
 ---
 
-## 2. Architecture decision
+## 2. Architecture (locked)
 
-### Chosen shape: hybrid harness
+### On-device first; cloud only when unavoidable
 
 ```
-┌──────────────────────────────────────────────┐
-│  iPhone (SwiftUI)                            │
-│  • Chat + push-to-talk                       │
-│  • Plan / approval cards                     │
-│  • Local session cache + keychain tokens     │
-│  • App Intents / Shortcuts entry (“ask …”)   │
-└────────────────────┬─────────────────────────┘
-                     │ HTTPS (SSE or WebSocket)
-                     ▼
-┌──────────────────────────────────────────────┐
-│  Harness server (Python — Odysseus-shaped)   │
-│  • loop, policy, context, memory, skills     │
-│  • tool registry (OAuth services + iOS-safe) │
-│  • session JSONL / DB                        │
-└────────────────────┬─────────────────────────┘
-                     │
-          ┌──────────┼──────────┐
-          ▼          ▼          ▼
-       LLM API   External APIs  Optional desktop
-                 (Gmail, Cal…)  Odysseus node
+Siri ──App Intent──► iPhone SignalLoop (source of truth for loops)
+                         │
+                         ├─ local: state, memory, policy, EventKit, files, Vision
+                         ├─ HTTPS ─► LLM API
+                         └─ HTTPS ─► Gmail / GitHub / search (user-connected)
 ```
 
-**Why hybrid first**
+| On iPhone | Cloud only | Forbidden |
+|-----------|------------|-----------|
+| Loop state machine, session log | LLM complete | Mac / home agent bridge |
+| Memory, skills catalog load | OAuth APIs | OS-wide UI automation |
+| Approvals UI, Siri intent handlers | Web fetch/search as tools | Silent send |
+| Camera / screenshot intake | — | Notification Center scrape |
 
-| Option | Pros | Cons | Verdict |
-|--------|------|------|---------|
-| Brain on server (hybrid) | Reuse Odysseus; fast iteration; strong models; heavy tools off-phone | You host user data; need auth | **v1** |
-| Loop on phone, model cloud | More on-device control | Duplicates harness in Swift; harder tools | v2 option |
-| Fully on-device | Max privacy / offline | Weak general agent; tool limits | niche later |
+**Note on current code:** `server/` is a valid **dev / API-shaped** harness for iteration. Product target remains **orchestration on device** (or on-device with thin API), not “user’s Mac runs the agent.” Revisit server-as-backend only as optional sync—not Mac desktop-use.
 
-**Design rule:** the iPhone is a **rich client** for I/O, approvals, and local sensors; the **harness** remains the source of truth for the agent loop (same as Odysseus).
+### Hybrid server today vs product target
 
-### Neutral message format (keep compatible with Odysseus)
+| Phase | Runtime |
+|-------|---------|
+| **Now (repo)** | Python `server/` + SwiftUI client (fast loop reuse) |
+| **Product target** | Loop + Loop store on iPhone; LLM/API from phone; Siri intents on device |
+| **Never** | Require Mac node for core value |
+
+### Neutral messages (unchanged)
 
 - `{"role": "user", "text"}`
 - `{"role": "assistant", "text", "tool_calls"}`
 - `{"role": "tool", "name", "text"}`
 
-Plus mobile-only **UI events** over the wire (not model-facing):
-
-- `plan` — proposed steps before side effects  
-- `approval_required` — tool gated until user confirms  
-- `status` — tool_start / tool_end for the transcript UI  
+Plus product events: `approval_required`, `loop_updated`, `status`.
 
 ---
 
-## 3. Component map (Odysseus → iPhone harness)
+## 3. Data model (core)
 
-| Odysseus | Mobile harness role |
-|----------|---------------------|
-| `provider.py` | LLM client on server (reuse / swap model) |
-| `loop.py` | Same loop; stream events to phone |
-| `tools.py` | New tool set (no bash jail; service tools) |
-| `security.py` | Policy modes + **approval channel** to phone |
-| `context.py` | Compaction on long day-long chats |
-| `memory.py` | User profile + project memory (`MEMORY.md` or DB) |
-| `skills.py` | `skills/<name>/SKILL.md` (morning_prep, etc.) |
-| `session.py` | Durable sessions; phone can resume by id |
-| `subagent.py` | Optional later (research child, calendar child) |
-| `harness.py` | Server `Harness` + HTTP API |
-| *(new)* iOS app | Chat, voice STT/TTS, approval UI, App Intents |
-| *(new)* auth | User accounts + OAuth for tools |
-| *(new)* gateway | REST + streaming for the phone |
-
----
-
-## 4. Repository layout (target)
-
-Evolve this repo (or split later if needed):
-
-```
-chitti/
-  odysseus/                 # existing desktop/CLI harness (keep)
-  plan.md                   # this file
-  mobile/
-    ios/                    # SwiftUI app (Xcode project)
-      App/
-      Features/
-        Chat/
-        Voice/
-        Approvals/
-        Settings/
-      Services/             # API client, keychain, STT/TTS
-  server/
-    api/                    # FastAPI (or similar) over harness
-    tools/                  # mobile-oriented tools
-    auth/                   # session + OAuth token store
-  skills/
-    morning_prep/SKILL.md
-  demos/                    # keep existing; add API demos later
+```text
+Loop
+├── id, title
+├── domain: career | life | both
+├── status: active | waiting | blocked | done
+├── why_it_matters
+├── evidence[]          # notes, URLs, photos, screenshots, voice transcripts
+├── steps[] / blockers[] / next_action
+├── drafts[]            # post, email — externalize only after approve
+├── links[]             # gmail thread ids, github urls
+├── waiting_until
+├── outcome             # reply, interview, resolved, abandoned
+└── log[]               # user + agent events
 ```
 
-**Constraint preference:** reuse `odysseus` packages for loop/provider/context/session where possible; add a thin `server/` layer rather than rewriting the agent brain in Swift for v1.
-
-**Note:** Odysseus is currently stdlib-only. The mobile *server* may add minimal deps (e.g. FastAPI, httpx) **only in `server/`**, leaving `odysseus/` pure if we want to keep the teaching package clean. Decision: **server may depend on packages; odysseus stays stdlib unless we deliberately merge.**
+**Memory (global):** career stack, tone, VIPs, constraints (“no meetings before 10”), household facts that affect both domains.
 
 ---
 
-## 5. Security & policy (product, not afterthought)
+## 4. Siri / App Intents surface (v1)
 
-### Modes
+| Intent | Passes to harness | Result |
+|--------|-------------------|--------|
+| `NewLoop` | title, domain?, free text | Create loop, optional enqueue plan |
+| `Log` | text, optional loop entity | Append evidence/log |
+| `Status` | optional loop entity | Short dialog + next blocker |
+| `Approve` | draft/action id | Policy gate |
+| `Pause` / `Resume` | loop entity | State flip |
 
-| Mode | Behavior |
-|------|----------|
-| `read-only` | Calendar/mail/notes **read**; no create/update/send |
-| `safe` (default) | Writes produce **drafts** or require **Approve** on device |
-| `yolo` | Auto-run allowed tools (dev only; not default in App Store build) |
+**Entities:** `LoopEntity` (query by name/domain/status).
 
-### Always-confirm classes
-
-- Send email / message  
-- Create or modify calendar events  
-- Delete anything  
-- Spend money / transfer  
-- Post to shared channels (Slack, etc.)  
-
-Blocked or pending tools return structured results the model can work around (`BLOCKED: …` / `PENDING_APPROVAL: …`), never crash the loop — same Odysseus rule.
-
-### Privacy
-
-- Tokens in Keychain on device; server stores refresh tokens encrypted at rest.  
-- Clear data export/delete path before any public release.  
-- Do not request contacts/mic/calendar until the feature needs them (purpose strings ready).
+Siri does **not** host multi-day planning; it **starts, interrogates, and gates**.
 
 ---
 
-## 6. v1 toolbelt (small, high leverage)
+## 5. Tools & skills
 
-Start with **≤ 8 tools**. Every tool must pass the Siri test.
+### Tools (product target)
 
 | Tool | Side effect | Approval |
 |------|-------------|----------|
-| `calendar_list` | none | no |
-| `calendar_propose_event` | none (returns draft JSON) | n/a |
-| `calendar_commit_event` | creates event | **yes** |
-| `notes_append` | writes note | safe: yes / optional |
-| `remember` | durable memory | no (user-visible in settings) |
-| `recall` / memory is in system prompt | none | no |
-| `web_search` or `fetch_url` | none | no |
-| `draft_message` | stores draft for user to send | no auto-send in v1 |
-| `use_skill` | loads skill text | no |
+| `loop_create` / `loop_update` / `loop_get` | local state | no |
+| `evidence_add` | local | no |
+| `remember` | durable memory | no (user-visible) |
+| `web_search` / `fetch_url` | network | no |
+| `gmail_search` / `gmail_get_thread` | read | no |
+| `gmail_create_draft` | draft | soft / yes |
+| `gmail_send` | send | **always** |
+| `calendar_propose` / `calendar_commit` | calendar | commit **yes** |
+| `draft_post` / `draft_message` | local draft | publish **yes** |
+| `use_skill` | load skill text | no |
 
-**Explicitly deferred:** Gmail/Slack OAuth (v1.1), WhatsApp (platform limits), desktop `spawn_odysseus` (v2), payments.
+No `bash`, no desktop click, no Mac spawn.
 
-**iOS-local tools (optional later, on-device):** EventKit write after server proposes; can be “server proposes → phone commits via EventKit” to reduce server holding calendar write scope.
+### Skills (examples)
 
-### Preferred commit path for calendar (recommended)
-
-1. Server tool: read calendar via OAuth **or** phone uploads next-48h snapshot.  
-2. Model proposes events as structured drafts.  
-3. Phone shows approval card → commits via **EventKit** on device.  
-
-That keeps write privilege closer to the user and simplifies App Store narrative.
-
----
-
-## 7. iOS client scope
-
-### Screens (v1)
-
-1. **Chat** — transcript (user / assistant / tool status / drafts)  
-2. **Voice** — hold-to-talk → STT → same send path as chat; TTS for final answer (optional toggle)  
-3. **Approvals** — inline cards: Approve / Edit / Reject  
-4. **Settings** — API endpoint, model, policy mode, memory viewer, linked accounts  
-5. **Onboarding** — mic permission, what the agent can/can’t do, connect calendar  
-
-### Platform hooks
-
-- **Speech:** `SFSpeechRecognizer` (or cloud STT if quality demands)  
-- **Speech out:** `AVSpeechSynthesizer` first; nicer TTS later  
-- **App Intents / Shortcuts:** “Ask Chitti” with text parameter → opens session  
-- **Share sheet (v1.1):** share PDF/text into a new task  
-
-### Non-goals for client
-
-- Implementing the full tool loop in Swift in v1  
-- Background always-listening  
-- Local LLM required for v1  
+| Skill | Domain |
+|-------|--------|
+| `opportunity` | career — research role/lab, map proof gaps |
+| `weekly_proof` | career — scope and ship one artifact |
+| `outreach_after_proof` | career — draft only post-proof |
+| `admin_dispute` | life — bills, claims, landlord |
+| `trip_onsite` | both — travel + interview/life logistics |
+| `life_admin` | life — letter/photo → deadlines + drafts |
 
 ---
 
-## 8. Server API (sketch)
+## 6. Security & policy
 
-Auth: bearer token per user (API key for solo dev; proper auth before multi-user).
+| Mode | Behavior |
+|------|----------|
+| `read-only` | Search, summarize, propose only |
+| `safe` (default) | Drafts free; send/calendar commit need approve |
+| `yolo` | Dev only |
 
-| Method | Path | Purpose |
-|--------|------|---------|
-| `POST` | `/v1/sessions` | Create session |
-| `GET` | `/v1/sessions/{id}` | Load messages |
-| `POST` | `/v1/sessions/{id}/messages` | User text; starts/continues loop |
-| `GET` | `/v1/sessions/{id}/events` | SSE stream: assistant tokens, tool_*, approval_* |
-| `POST` | `/v1/sessions/{id}/approvals/{aid}` | approve / reject |
-| `GET` | `/v1/memory` | Read durable memory |
-| `PUT` | `/v1/memory` | User-edited memory |
-
-Loop behavior on each user message: same as `Harness.run`, but stream `on_event` to SSE; pause on tools that need approval until the approvals endpoint resolves (or timeout → `BLOCKED`).
+Always confirm: send email, public post, delete, money-related actions.
 
 ---
 
-## 9. Phased delivery
+## 7. Component map (repo → SignalLoop)
 
-### Phase 0 — Spec freeze (0.5 day)
-
-- [x] Product intent + hybrid architecture (this doc)  
-- [ ] Confirm v1 tools list and approval matrix  
-- [ ] Confirm solo-dev auth: single API key vs Apple Sign In later  
-- [ ] Choose server stack: FastAPI + reuse `odysseus` (recommended)  
-
-### Phase 1 — Server harness slice (Days 1–2)
-
-**Goal:** HTTP-driven Odysseus-shaped agent with mobile-safe tools and mock approvals.
-
-- [ ] `server/` package: app entry, config from env  
-- [ ] Wire existing `run_loop` / `Harness` patterns behind `POST .../messages`  
-- [ ] SSE event bridge from `on_event`  
-- [ ] Tools: `remember`, `calendar_list` (fixture or ICS fixture first), `draft_message`, `use_skill`  
-- [ ] Policy: `safe` blocks commit tools without approval id  
-- [ ] Skill: `skills/morning_prep/SKILL.md`  
-- [ ] Demo script: `demos/mobile_morning_prep.py` (CLI client against API)  
-- [ ] Session persistence (reuse `session.py` or DB)  
-
-**Exit criteria:** curl/SSE session completes a multi-tool morning-prep style task with one approval pause.
-
-### Phase 2 — iOS thin client (Days 3–5)
-
-**Goal:** Chat app that talks to the server end-to-end.
-
-- [ ] Xcode project under `mobile/ios`  
-- [ ] Auth: paste API base URL + key into Keychain  
-- [ ] Chat UI + streaming transcript  
-- [ ] Render tool_start/tool_end as compact rows  
-- [ ] Approval cards wired to approvals API  
-- [ ] Settings screen  
-- [ ] Error states (offline, 401, loop error)  
-
-**Exit criteria:** From a real iPhone/Simulator, run a full morning-prep conversation with one approve/reject.
-
-### Phase 3 — Voice (Day 6)
-
-- [ ] Push-to-talk → STT → send as user message  
-- [ ] Optional TTS on final assistant text  
-- [ ] Mic permission copy + graceful denial  
-
-**Exit criteria:** Hands-free ask → plan → approve on screen → spoken summary.
-
-### Phase 4 — Real calendar path (Days 7–8)
-
-- [ ] Choose: Google Calendar OAuth on server **or** EventKit snapshot + on-device commit  
-- [ ] Implement list + propose + commit with approval  
-- [ ] Timezone correctness tests  
-- [ ] Memory: preferences (“no meetings before 10”)  
-
-**Exit criteria:** Agent proposes a real event; user approves; it appears in Calendar.
-
-### Phase 5 — Siri as doorbell (Day 9)
-
-- [ ] App Intent: `AskChittiIntent(text:)`  
-- [ ] Shortcuts phrase documentation  
-- [ ] Deep link into the right session  
-
-**Exit criteria:** “Hey Siri, ask Chitti what’s on my plate tomorrow” opens/runs the agent path (Siri launches; Chitti reasons).
-
-### Phase 6 — Harden for daily use (Days 10–12)
-
-- [ ] Compaction on long sessions (`context.compact`)  
-- [ ] Crash-safe resume (session load on app launch)  
-- [ ] Rate limits + basic abuse controls on API  
-- [ ] Logging without leaking message bodies in prod  
-- [ ] Privacy policy stub + data delete  
-- [ ] TestFlight checklist  
-
-**Exit criteria:** You use it for 3 real mornings without the developer console.
-
-### Later (explicit backlog)
-
-- Gmail draft/send-with-approval  
-- Slack / Linear  
-- Share sheet → PDF skill  
-- Subagents  
-- On-device loop option  
-- Desktop Odysseus tool (`run_on_mac`)  
-- Multi-user accounts + Apple Sign In  
+| Repo piece | SignalLoop role |
+|------------|-----------------|
+| `odysseus/` | Reference coding harness; patterns for loop/policy/session |
+| `server/` | Dev harness API; evolve tools toward loops + Gmail |
+| `mobile/ios/` | SignalLoop client + App Intents |
+| `skills/` | Product skills (`opportunity`, `weekly_proof`, …) |
+| `plan.md` | This document |
+| `AGENTS.md` | Instructions for coding agents in this repo |
 
 ---
 
-## 10. Mapping to “days” (teaching + build order)
+## 8. Phased delivery
 
-Mirror Odysseus pedagogy so the mobile harness stays understandable:
+### Phase 0 — Align
+- [x] Product: SignalLoop career + life loops  
+- [x] Siri complements; no OS competition  
+- [x] On-device orchestration target; no Mac bridge  
+- [ ] Rename/brand UI copy toward SignalLoop (incremental)
 
-| Day | Deliverable |
-|-----|-------------|
-| M1 | Server loop + SSE + one tool (`remember`) |
-| M2 | Policy + approval protocol + `draft_message` |
-| M3 | Skills + memory in system prompt + morning_prep |
-| M4 | Sessions + resume API |
-| M5 | iOS chat client |
-| M6 | Voice I/O |
-| M7 | Calendar propose/commit |
-| M8 | App Intents + polish |
+### Phase 1 — Loop core (server or on-device store)
+- [ ] Persist `Loop` objects (JSON/SQLite)  
+- [ ] Tools: loop CRUD, evidence, remember  
+- [ ] Skills: `opportunity`, `admin_dispute`  
+- [ ] Approval on externalize  
+
+### Phase 2 — iOS product shell
+- [ ] Loop list + detail cards (not chat-only)  
+- [ ] Voice in-app + Siri intents (Log, Status, NewLoop, Approve)  
+- [ ] Camera / screenshot share → evidence  
+
+### Phase 3 — Connectors
+- [ ] Gmail OAuth: search, get thread, create draft  
+- [ ] Calendar propose/commit with approval  
+- [ ] Optional GitHub link / later OAuth  
+
+### Phase 4 — Career depth
+- [ ] `weekly_proof` skill + artifact checklist  
+- [ ] Outreach drafts only after proof gate  
+- [ ] Outcome logging (reply / screen / closed)  
+
+### Phase 5 — Polish & launch
+- [ ] Privacy copy, data delete, retention  
+- [ ] TestFlight  
+- [ ] Demo video: career loop + life loop + Siri status  
 
 ---
 
-## 11. Risks & mitigations
+## 9. Success metrics
+
+| Horizon | Signal |
+|---------|--------|
+| 14 days | User closes or advances ≥1 **career** and ≥1 **life** loop |
+| Weekly | ≥1 proof-oriented career step or admin resolution step |
+| Virality | Shared **artifacts** or “closed a loop” stories—not referral spam |
+| Siri | ≥20% of captures via intents among active users |
+
+---
+
+## 10. Risks
 
 | Risk | Mitigation |
 |------|------------|
-| Competing with Siri AI improvements | Stay on *your* tools + policy + memory; use Siri only as launcher |
-| App Store rejection (automation / spam) | No UI scraping; user-initiated actions; clear approvals |
-| OAuth / token security | Keychain; encrypted server store; short-lived access tokens |
-| Latency on voice | Stream partial assistant text; TTS only final summary |
-| Scope creep (too many integrations) | Hard cap: morning prep + calendar until daily use works |
-| Odysseus stdlib purity vs server deps | Isolate deps in `server/`; don’t pollute teaching package |
+| Becomes generic chatbot | UI centered on **Loops**, not endless chat |
+| Personal dilutes pro brand | Lead career; frame life as capacity |
+| Server-only privacy concerns | Move source of truth on-device over time |
+| Scope creep (desktop-use, notif scrape) | Explicit non-goals in this plan |
+| Hallucinated deadlines/facts | Show evidence quotes; confidence flags |
 
 ---
 
-## 12. Success metrics
+## 11. Immediate next actions
 
-**v1 success (personal):**
-
-1. You complete a real morning prep **by voice or chat** without opening Calendar/Mail first.  
-2. At least one **write** goes through an **approval card** (not silent side effect).  
-3. A preference stored via `remember` affects a **later** session.  
-4. A session survives app kill and resumes.  
-5. Siri/Shortcuts can **start** a Chitti task (optional but targeted in Phase 5).
-
-**Non-metrics (ignore early):** DAU, App Store ranking, parity with Siri system commands.
+1. Implement `Loop` store + tools against current `server/` *or* iOS-local store (choose one path for v0.1).  
+2. Add skills: `opportunity`, `admin_dispute`.  
+3. Wire App Intents stubs on iOS: NewLoop, Log, Status, Approve.  
+4. Keep Odysseus coding demos intact; don’t break teaching package purity without intent.  
+5. Never add Mac-node tools without revising this plan.
 
 ---
 
-## 13. Open decisions (resolve in Phase 0)
+## 12. North star
 
-| Decision | Options | Recommendation |
-|----------|---------|----------------|
-| Server framework | stdlib HTTP vs FastAPI | FastAPI in `server/` for SSE ergonomics |
-| Calendar authority | Google OAuth vs EventKit-on-device | EventKit commit on device for v1 |
-| LLM | Keep Gemini via Odysseus provider vs multi-provider | Keep current provider; abstract already exists |
-| Auth | Static API key vs Sign in with Apple | API key until TestFlight multi-user |
-| Repo | Monorepo vs `chitti-ios` split | Monorepo until app ships TestFlight |
-| Product name | Chitti / Odysseus Mobile / other | **Chitti** for app; Odysseus for brain package |
-
----
-
-## 14. Immediate next actions
-
-When implementation starts (after this plan is accepted):
-
-1. Create `server/` skeleton + env sample (`ODYSSEUS_API_KEY`, `CHITTI_API_KEY`, `PORT`).  
-2. Expose `Harness.run` over one streaming endpoint with `remember` + stub calendar.  
-3. Add `skills/morning_prep/SKILL.md`.  
-4. Scaffold `mobile/ios` with a single Chat screen and hardcoded server URL for Simulator.  
-5. Do not add Gmail or wake word until Phase 4–5 exit criteria pass.
-
----
-
-## 15. One-sentence north star
-
-**Chitti on iPhone is an Odysseus harness with a voice/chat face, a confirm-before-write leash, and tools for life-ops Siri cannot run — not a second Siri.**
+**SignalLoop is the persistent, observable, goal-directed harness for career and life open loops—Siri is the universal voice interface that starts, checks, and approves; the iPhone harness is the runtime.**
