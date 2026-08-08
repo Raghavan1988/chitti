@@ -20,6 +20,9 @@ struct SettingsView: View {
                         appState.saveSettings()
                         appState.statusLine = "Settings saved"
                     }
+                    Text("Physical iPhone: use http://<mac-lan-ip>:8787 from ./scripts/run-server.sh — not 127.0.0.1. Simulator may use 127.0.0.1.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
 
                 Section("Voice") {

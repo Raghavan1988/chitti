@@ -1,41 +1,104 @@
-# Odysseus
+# Chitti / Odysseus
 
-A minimal agent harness in Python — standard library only, no third-party
-packages, Python 3.10+. Built as a reference implementation, one day at a time.
+Two harnesses in one repo:
 
-An *agent* here is a conversation that runs itself: the harness calls a model,
-executes any tools the model asks for, feeds the results back, and repeats until
-the model answers in plain text.
+1. **Odysseus** — minimal **coding** agent harness in Python (stdlib only).
+2. **Chitti** — **iPhone** personal-ops agent: SwiftUI app + Python server, for
+   multi-step tasks Siri is weak at (day prep, drafts, memory, confirm-before-write).
+
+An *agent* is a conversation that runs itself: call a model, run tools, feed
+results back, repeat until the model answers in plain text.
+
+---
+
+## Quick start: test on a real iPhone (Mac + device)
+
+Clone this repo on a **Mac**, run the harness, install the app to your iPhone.
+
+### A. Server on the Mac
+
+```bash
+git clone https://github.com/Raghavan1988/chitti.git
+cd chitti
+
+export ODYSSEUS_API_KEY=your_key_here   # or GEMINI_API_KEY
+export CHITTI_API_KEY=dev-key-change-me
+
+chmod +x scripts/*.sh
+./scripts/run-server.sh
+```
+
+Note the printed **LAN URL** (e.g. `http://192.168.1.42:8787`). Keep this process running.
+
+Optional: copy `.env.example` → `.env` and fill keys instead of exporting.
+
+### B. iOS app → physical iPhone
+
+```bash
+open mobile/ios/Chitti.xcodeproj
+```
+
+1. **Signing & Capabilities** → your Apple ID **Team** (automatic signing).
+2. Change **Bundle Identifier** if needed (`com.chitti.app` → unique id).
+3. Connect the iPhone (USB), unlock, trust the computer.
+4. Select the **iPhone** as run destination → **Run** (▶).
+5. On device: **Settings → General → VPN & Device Management** → trust your cert.
+
+### C. App Settings (on the phone)
+
+| Setting | Value |
+|---------|--------|
+| Base URL | `http://<mac-lan-ip>:8787` (from `run-server.sh`) |
+| API key | same as `CHITTI_API_KEY` (default `dev-key-change-me`) |
+
+**Do not use `127.0.0.1` on a physical iPhone** — that points at the phone itself.
+Simulator may use `http://127.0.0.1:8787`.
+
+### D. Try it
+
+Chat:
+
+```text
+Prep my day. Load the morning_prep skill and summarize my calendar.
+```
+
+Or use the mic. Approve calendar/note writes when the card appears.
+
+Full iOS notes: [`mobile/ios/README.md`](mobile/ios/README.md).  
+Server API: [`server/README.md`](server/README.md).  
+Product plan: [`plan.md`](plan.md).
+
+```
+┌─────────────┐  Wi‑Fi HTTP/SSE   ┌──────────────────────┐  HTTPS  ┌─────────┐
+│  iPhone app │ ───────────────► │ python3 -m server    │ ──────► │  Model  │
+│  chat/voice │                  │ tools + approvals    │         │  API    │
+└─────────────┘                  └──────────────────────┘         └─────────┘
+```
+
+---
 
 ## Layout
 
 ```
-odysseus/          the coding-agent harness package
-  provider.py      the only file that knows about the model (Gemini) — HTTP,
-                   wire format, and the Gemini 3 thoughtSignature round-trip
-  loop.py          the agent loop: model -> tools -> results -> repeat, with
-                   on_event / before_tool / before_turn sockets
-  tools.py         the Tool type, the @tool decorator, and the six core tools
-                   (read/write/edit/bash/list/grep) jailed to a working directory
-  security.py      Policy (read-only / safe / yolo) and always-on deny rules
-  context.py       token estimation and compaction on the before_turn socket
-  memory.py        the base system prompt and durable ODYSSEUS.md project memory
-  skills.py        on-demand procedures loaded from skills/<name>/SKILL.md
-  harness.py       composes the full coding agent
-server/            iPhone harness API (life-ops tools, SSE, approvals)
-mobile/ios/        SwiftUI thin client (chat, voice, approvals)
-skills/            shared skill packs (e.g. morning_prep)
-plan.md            iPhone harness product + delivery plan
-demos/             runnable examples
-  day1_dice.py     the smallest complete agent: one tool, one loop, one answer
-  day2_build.py    a coding agent with hands: build, run, and refuse safely
-  day3_context.py  compaction, cross-conversation memory, and a voice skill
-  mobile_morning_prep.py  CLI client for the mobile harness API
+odysseus/              coding-agent harness (Python stdlib)
+server/                Chitti mobile harness HTTP API + life-ops tools
+mobile/ios/            Xcode project + SwiftUI client
+  Chitti.xcodeproj/    open this on a Mac
+  Chitti/              app sources
+skills/                shared skill packs (e.g. morning_prep)
+scripts/
+  run-server.sh        start harness + print LAN URL for iPhone
+  smoke-api.sh         health check (no model call)
+demos/                 day1–3 coding demos + mobile_morning_prep.py
+plan.md                iPhone harness product plan
+.env.example           env vars for server + model
 ```
 
-Everything outside `provider.py` speaks a small, neutral message format and
-never touches HTTP or vendor-specific JSON. Swap the provider and the rest of
-the harness follows a different model unchanged.
+---
+
+## Odysseus (coding agent)
+
+Standard library only, Python 3.10+. Built as a reference implementation.
 
 ### Neutral message format
 
@@ -43,82 +106,86 @@ the harness follows a different model unchanged.
 - `{"role": "assistant", "text", "tool_calls"}`
 - `{"role": "tool", "name", "text"}`
 
-### Tools
+Everything outside `provider.py` uses this format and never touches vendor HTTP.
 
-A tool is any object with two attributes:
-
-- `.spec` — the schema the model sees, shaped `{"schema": {...}}`
-- `.run` — a callable invoked with the model's arguments as keywords
-
-The `@tool` decorator in `tools.py` derives the schema from a function's
-signature — argument names become parameters, and those without a default are
-required. `core_tools(workdir)` returns six tools closed over a single
-`resolve()` gate, so no tool can touch a file outside the working directory.
-
-The loop never crashes because of a tool: unknown names and raised exceptions
-become tool results the model can read and recover from, not tracebacks.
-
-### Security
-
-`Policy(mode, approver)` fills the loop's `before_tool` socket. Modes are
-`read-only` (only `read_file`, `list_files`, `grep`), `safe` (writes and
-commands ask an approver), and `yolo` (trust everything). A set of deny patterns
-— wiping `/`, `~`, or `$HOME`, `sudo`, `curl | sh`, force-pushes, raw-disk
-writes — is refused in **every** mode. A blocked call becomes a `BLOCKED: ...`
-tool result the model reads and works around, never a crash.
-
-### Context, memory, and skills
-
-- **Context.** `compact()` rides the `before_turn` socket: when the message
-  list outgrows its token budget it folds the old turns into one dense summary
-  and keeps the recent tail verbatim, so a long run stays inside the window.
-- **Memory.** `build_system_prompt()` gives Odysseus its character and folds in
-  `ODYSSEUS.md` when present. `remember()` appends a note to that file, so a fact
-  learned on one run is read back on every future run over the same directory —
-  even in a brand-new conversation with no shared history.
-- **Skills.** A skill is a `skills/<name>/SKILL.md` procedure. The catalog
-  advertises what exists in the system prompt; a `use_skill` tool pulls the full
-  text in only when relevant, so knowledge scales without bloating every prompt.
-
-## Setup
-
-Set an API key before running anything:
+### Setup
 
 ```bash
 export ODYSSEUS_API_KEY=...   # or GEMINI_API_KEY
 ```
 
-## Running the demos
+### Coding demos
 
 ```bash
 python3 demos/day1_dice.py       # one tool, one loop, one answer
-python3 demos/day2_build.py      # build fib.py, then refuse a dangerous command
-python3 demos/day3_context.py    # compaction, durable memory, and a skill
+python3 demos/day2_build.py      # build + policy refusal
+python3 demos/day3_context.py    # compaction, memory, skill
 ```
 
-`day1_dice.py` rolls three dice through a hand-written `roll_dice` tool and
-reports whether the total beats 10. `day2_build.py` writes and runs a program in
-a scratch directory, then shows the policy blocking a home-directory wipe and the
-path jail catching an escape attempt. `day3_context.py` runs a long task that
-trips compaction mid-run, proves a remembered fact survives into a fresh
-conversation, and lets a `brand-voice` skill change the agent's voice with zero
-code changes. Each demo prints a trace of every step: the user prompt, the
-assistant's tool calls, the tool results, and the final answer.
+### Package map (`odysseus/`)
 
-## Mobile harness (iPhone)
+| File | Role |
+|------|------|
+| `provider.py` | Only Gemini/HTTP-aware module |
+| `loop.py` | model → tools → results → repeat |
+| `tools.py` | `@tool` + core file/shell tools (jailed) |
+| `security.py` | Policy: read-only / safe / yolo |
+| `context.py` | Compaction on `before_turn` |
+| `memory.py` | System prompt + `ODYSSEUS.md` |
+| `skills.py` | On-demand `skills/<name>/SKILL.md` |
+| `session.py` | Durable JSONL sessions |
+| `subagent.py` | Depth-limited child agents |
+| `harness.py` | Full coding agent assembly |
 
-Hybrid agent for tasks Siri is weak at: chat/voice UI on the phone, harness on
-your machine. See `plan.md` and `server/README.md`.
+### Security (coding agent)
+
+`Policy` gates tools. Modes: `read-only`, `safe` (approver), `yolo`. Catastrophic
+bash patterns are denied in **every** mode. Blocks become `BLOCKED: ...` tool
+results, not crashes.
+
+---
+
+## Chitti mobile harness (without the phone)
+
+CLI against the same API:
 
 ```bash
-export ODYSSEUS_API_KEY=...          # model
+export ODYSSEUS_API_KEY=...
 export CHITTI_API_KEY=dev-key-change-me
-python3 -m server                    # http://0.0.0.0:8787
+./scripts/run-server.sh          # terminal 1
 
-# other terminal
 export CHITTI_API_KEY=dev-key-change-me
-python3 demos/mobile_morning_prep.py
+export CHITTI_AUTO_APPROVE=1
+python3 demos/mobile_morning_prep.py   # terminal 2
 ```
 
-SwiftUI sources live under `mobile/ios/Chitti/` — open via a new Xcode app
-project on a Mac (see `mobile/ios/README.md`).
+Mobile tools (v1): `calendar_list`, `calendar_propose_event`,
+`calendar_commit_event` (approval), `draft_message`, `notes_append` (approval),
+`remember`, `use_skill`.
+
+---
+
+## Environment variables
+
+| Variable | Used by | Default |
+|----------|---------|---------|
+| `ODYSSEUS_API_KEY` / `GEMINI_API_KEY` | model | (required for agent turns) |
+| `ODYSSEUS_MODEL` | model id | provider default |
+| `CHITTI_API_KEY` | phone ↔ server auth | `dev-key-change-me` |
+| `CHITTI_HOST` | server bind | `0.0.0.0` |
+| `CHITTI_PORT` | server port | `8787` |
+| `CHITTI_POLICY` | `read-only` / `safe` / `yolo` | `safe` |
+
+See `.env.example`.
+
+---
+
+## Requirements
+
+| Piece | Need |
+|-------|------|
+| Coding demos / server | Python 3.10+, network for model API |
+| iPhone app | Mac, Xcode 15+, Apple ID, iPhone (iOS 17+) |
+| Physical device test | Mac and iPhone on same Wi‑Fi (or USB + LAN access) |
+
+No third-party Python packages for `odysseus/` or `server/` (stdlib HTTP).

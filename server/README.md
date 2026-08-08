@@ -4,16 +4,25 @@ Stdlib HTTP API that runs an Odysseus-shaped agent loop with **life-ops tools** 
 
 ## Run
 
-From the repo root:
+From the repo root (preferred — prints LAN URL for iPhone Settings):
 
 ```bash
 export ODYSSEUS_API_KEY=...          # or GEMINI_API_KEY
+export CHITTI_API_KEY=dev-key-change-me
+./scripts/run-server.sh
+```
+
+Or:
+
+```bash
+export ODYSSEUS_API_KEY=...
 export CHITTI_API_KEY=dev-key-change-me
 export CHITTI_POLICY=safe            # read-only | safe | yolo
 python3 -m server
 ```
 
-Listens on `http://0.0.0.0:8787` by default.
+Listens on `http://0.0.0.0:8787` by default so devices on the LAN can connect.
+Use `http://127.0.0.1:8787` only from the same machine (Simulator / curl).
 
 ## Demo client
 
