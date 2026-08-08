@@ -9,61 +9,107 @@ Instructions for coding agents (and humans) working in this repository.
 | Path | Role |
 |------|------|
 | `odysseus/` | **Odysseus** — minimal stdlib **coding** agent harness (reference implementation) |
-| `server/` | HTTP/SSE mobile harness API (life-ops tools today; evolving toward SignalLoop) |
-| `mobile/ios/` | SwiftUI client + Xcode project; Siri/App Intents target surface |
+| `server/` | HTTP/SSE mobile harness API; evolving toward LoopEngine + cloud wake plane |
+| `mobile/ios/` | SwiftUI surfaces + App Intent **adapters** (not planners) |
 | `skills/` | On-demand `SKILL.md` procedures |
 | `demos/` | Runnable teaching demos + mobile API client |
-| `plan.md` | **Product + delivery plan** (source of truth for SignalLoop direction) |
-| `plan.md` / this file | Update both when product direction changes |
+| `plan.md` | **Product + architecture** (source of truth) |
+| `AGENTS.md` | **Implementation invariants** for agents (this file) |
+| `CONTINUE_ON_MAC.md` | Handoff for Mac + Xcode development |
 
-**Product north star: SignalLoop** — an iPhone-native harness for **multi-day loops** (`career` | `life` | `both`), coexisting with **Siri** via App Intents. See `plan.md`.
-
----
-
-## Non-negotiable product constraints
-
-1. **Do not compete with Siri** for OS control (timers, calls, HomeKit, system settings).  
-2. **Siri complements the harness:** capture, status, approve, disambiguate entities — not multi-day planning.  
-3. **No Mac / desktop bridge** for core value (no desktop-use node, no “run agent on Mac”).  
-4. **Compute on iPhone** for orchestration/state/local tools; **cloud only** for LLM + unavoidable APIs (Gmail, GitHub, search).  
-5. **Approve before send / calendar commit / public post** (default `safe` policy).  
-6. **No** notification-center scraping, Messages DB access, or Accessibility-based UI automation of other apps.  
-7. Prefer **Loop-centric** product work over generic chatbot features.
-
-When unsure, read `plan.md` sections 1–2 and 11.
+**Product north star: SignalLoop** — multi-day loops (`career` | `life` | `both`), Siri as **optional adapter**, on-device authoritative state, thin cloud wake plane, **no Mac bridge**. See `plan.md`.
 
 ---
 
-## Architecture rules
+## SignalLoop product invariants
+
+### Standalone product
+
+- SignalLoop must remain **fully usable without Siri**.  
+- Every App Intent must have an **equivalent in-app operation**.  
+- No core workflow may depend on a Mac, desktop node, or Siri availability.  
+- Do not ship Siri-only features that weaken the standalone product.
+
+### Siri boundary
+
+- Use **modern App Intents**; do not add legacy SiriKit unless a required system domain has no App Intents equivalent.  
+- **Siri is an adapter**, not a planner, memory store, tool provider, or data source.  
+- Never assume access to Siri history, raw audio as an API, general personal context, Notification Center, Messages, or arbitrary phone data.  
+- SignalLoop receives only **explicitly declared** App Intent parameters and entities.  
+- SignalLoop **cannot proactively query Siri** or initiate a Siri conversation.  
+- Proactive UX uses **notifications, widgets, Live Activities, and in-app voice**—not unsolicited Siri dialog.
+
+### Architecture
+
+- Core harness / LoopEngine modules **must not import AppIntents**.  
+- App Intent handlers **only translate** requests into **LoopCommandBus** commands.  
+- **Siri-specific business logic is prohibited** (no planning or policy forks “if source == siri” except privacy projection / UX).  
+- All commands must carry **`source`** and **`idempotency_key`**.  
+- Repeated Siri (or any) invocations must **not duplicate** loops, evidence, or actions.  
+- Surfaces (SwiftUI, Siri, Share, Widget, notification actions) → **LoopCommandBus** → **LoopEngine** (memory · policy · tools · log).
+
+### Safety
+
+- Siri may execute **local, reversible** operations (create loop, log evidence, status, pause/resume, approve **internal** plan, mark complete, open review).  
+- **Sending, publishing, deleting, spending, or committing calendar changes** requires **authenticated foreground review** in SignalLoop—not a general voice “Approve.”  
+- Prefer intents: `NewLoop`, `LogEvidence`, `Status`, `Pause`/`Resume`, `ApprovePlan`, `ReviewAction`, `MarkComplete` (see `plan.md`).  
+- Siri **Status** must use a **privacy-safe projection** when locked; never speak email contents, recipient details, health information, or sensitive life-loop evidence from the lock screen.  
+- Default policy is **safe**: drafts OK; externalize only after review.
+
+### Background execution
+
+- Do **not** assume `BGTaskScheduler` (or similar) runs at an exact time or cadence.  
+- Reliable multi-day monitoring uses the approved **cloud wake plane** (scheduled retrieval, LLM, OAuth reads, push).  
+- Background and cloud jobs may **research, fetch, draft, or notify**; they may **not** silently externalize an action.  
+- Cloud must not perform consequential side effects without an **approval/review token** from foreground review.  
+- **No Mac / desktop node** for core value.
+
+---
+
+## Non-negotiable product constraints (summary)
+
+1. Do not compete with Siri for OS control (timers, calls, HomeKit, settings).  
+2. Siri complements via App Intents adapters only—not multi-day planning.  
+3. No Mac / desktop bridge.  
+4. iPhone: authoritative loops + memory + review UI; cloud: wake + LLM + OAuth APIs + push.  
+5. Loop-centric product—not generic chatbot.  
+6. No notification scraping, Messages DB, or Accessibility UI automation of other apps.  
+
+When unsure, read `plan.md` sections 1–2, 4, and 11.
+
+---
+
+## Architecture rules by package
 
 ### Odysseus (`odysseus/`)
 
-- **Stdlib only** — no third-party packages in this package.  
+- **Stdlib only** — no third-party packages.  
 - Neutral message format only outside `provider.py`.  
 - Provider is the sole Gemini/HTTP seam.  
 - Loop never crashes on tools; errors become tool results.  
-- Keep module docstrings and size/spirit of the teaching build.  
-- Do not turn Odysseus into SignalLoop; reuse **patterns**, not product UI.
+- Do not turn Odysseus into SignalLoop; reuse **patterns**, not product UI.  
+- Must not gain AppIntents or Siri dependencies.
 
 ### Server (`server/`)
 
-- May stay stdlib HTTP for the mobile API.  
-- Mobile tools = life-ops / future **loop** tools — **not** coding `bash` jail tools.  
-- Approvals: self-gated commits + SSE `approval_required`.  
-- Optional path for fast iteration; **product target** is on-device loop ownership (see `plan.md`).  
-- Do **not** add Mac-node / desktop click tools.
+- Stdlib HTTP OK for dev API / future cloud wake sketch.  
+- Loop tools — **not** coding `bash` jail tools.  
+- Approvals: no silent externalize; review tokens for send/commit.  
+- Do **not** add Mac-node / desktop click tools.  
+- Prefer command-shaped APIs (idempotent) as LoopCommandBus evolves.
 
 ### iOS (`mobile/ios/`)
 
-- Thin client today; grow **Loop** list/detail, approvals, App Intents.  
-- Siri intents (target): `NewLoop`, `Log`, `Status`, `Approve`.  
-- Network: LAN/dev server OK; production assumes LLM/API from device or thin backend.  
-- Respect Info.plist privacy strings; local networking for debug only.
+- Grow Loop list/detail, in-app review, command bus host.  
+- App Intent handlers: **thin adapters** → LoopCommandBus only.  
+- Target intents: `NewLoop`, `LogEvidence`, `Status`, `Pause`/`Resume`, `ApprovePlan`, `ReviewAction`, `MarkComplete`.  
+- Implement **in-app twins** for every intent before treating Siri as done.  
+- Core engine code: no `import AppIntents`.
 
 ### Skills
 
-- Files under `skills/<name>/SKILL.md` with optional `description:` line.  
-- Prefer SignalLoop skills: `opportunity`, `weekly_proof`, `admin_dispute`, `trip_onsite`, `outreach_after_proof`.
+- `skills/<name>/SKILL.md` with optional `description:` line.  
+- Prefer: `opportunity`, `weekly_proof`, `admin_dispute`, `trip_onsite`, `outreach_after_proof`.
 
 ---
 
@@ -72,31 +118,32 @@ When unsure, read `plan.md` sections 1–2 and 11.
 ```text
 Loop { id, title, domain: career|life|both, status, evidence, steps,
        drafts, links, waiting_until, outcome, log }
+
+LoopCommand { type, payload, source, idempotency_key }
 ```
 
-Global **memory** = durable prefs/facts (career stack, tone, household constraints).
-
-Career and life share **one** harness; do not split into two apps or two incompatible stores.
+Global **memory** = durable prefs/facts (not Siri memory).  
+Career and life share **one** store and engine.
 
 ---
 
 ## Coding standards
 
 - Match existing style in the file you edit.  
-- Every new module: short docstring (day/concept/rules if Odysseus-style).  
-- Public functions: docstrings.  
+- Public functions: docstrings; Odysseus modules keep teaching docstrings.  
 - Prefer small diffs; no drive-by refactors.  
-- Do not commit secrets (`.env`, API keys). Use `.env.example`.  
-- Do not commit `server/workspace` runtime junk (memory, sessions, drafts) — gitignored.
+- Do not commit secrets (`.env`, API keys).  
+- Do not commit `server/workspace` runtime junk — gitignored.
 
 ---
 
 ## Testing expectations
 
-- Prefer smoke tests that need **no** API key (tools, HTTP auth, loop CRUD).  
-- Model-calling demos: document required `ODYSSEUS_API_KEY` / `GEMINI_API_KEY`.  
-- Mobile: `scripts/run-server.sh` + `scripts/smoke-api.sh` + `demos/mobile_morning_prep.py`.  
-- After harness changes: run import/smoke paths that already exist; don’t claim iOS build green on Linux.
+- Smoke tests without API keys where possible (tools, auth, loop CRUD, command idempotency).  
+- Model demos: document `ODYSSEUS_API_KEY` / `GEMINI_API_KEY`.  
+- Mobile: `scripts/run-server.sh`, `scripts/smoke-api.sh`, `demos/mobile_morning_prep.py`.  
+- For Siri work: assert **in-app parity** and that core packages do not import AppIntents.  
+- Do not claim iOS build green on Linux.
 
 ---
 
@@ -104,38 +151,51 @@ Career and life share **one** harness; do not split into two apps or two incompa
 
 | Feature type | Done means |
 |--------------|------------|
-| Tool | Schema + run; failure as string; policy/approval if write |
-| Loop API | Create/get/update persisted; survives restart |
-| Siri intent | Parameters documented; maps to loop action; short dialog result |
-| Skill | SKILL.md procedure agents can `use_skill` |
-| UI | Loop-visible outcome, not only chat transcript |
+| Tool | Schema + run; failure as string; review if externalize |
+| Loop API | Persist; survive restart; command-idempotent writes |
+| App Intent | Thin adapter; **in-app twin**; short privacy-safe dialog |
+| Skill | SKILL.md loadable via `use_skill` |
+| UI | Loop-visible outcome, not chat-only |
+| Cloud job | May draft/notify; cannot silent-send |
 
 ---
 
 ## Explicitly reject
 
-- “Better Siri” positioning or features that only duplicate system commands  
+- Treating Siri as an information source or planner  
+- Planning or tool execution **inside** intent handlers  
+- General Siri `Approve` that sends/posts/commits  
+- Siri-only core workflows  
 - Mac SSH/agent bridges as dependencies  
-- Auto-send email/social without approval  
+- Assuming reliable exact-time iOS background monitoring alone  
+- Silent externalize from background or cloud  
 - Scraping LinkedIn/personal WhatsApp at scale  
-- Expanding scope to general computer-use on device  
+- Notification Center / Messages graph access  
+- “Better Siri” positioning  
 
 ---
+
+## Continuing on Mac + Xcode
+
+Primary handoff doc: **`CONTINUE_ON_MAC.md`** (clone → server → Xcode → device → next work).
+
+- iOS build / Siri / App Intents **require a Mac**; Linux is fine for `odysseus/` + `server/` only.
+- On Mac, implement **in-app Loop UI and command bus before** relying on Siri.
+- Do not treat the developer Mac as a product “desktop agent node.”
 
 ## Quick commands
 
 ```bash
-# Coding harness demos
 export ODYSSEUS_API_KEY=...
 python3 demos/day1_dice.py
 
-# Mobile / SignalLoop-oriented API
 export CHITTI_API_KEY=dev-key-change-me
 ./scripts/run-server.sh
 ./scripts/smoke-api.sh
 
-# iOS (Mac)
+# Mac
 open mobile/ios/Chitti.xcodeproj
+# full checklist: CONTINUE_ON_MAC.md
 ```
 
 ---
@@ -145,8 +205,9 @@ open mobile/ios/Chitti.xcodeproj
 | Doc | Update when |
 |-----|-------------|
 | `plan.md` | Product intent, architecture locks, phases, non-goals |
-| `AGENTS.md` | Agent/developer constraints and repo map |
-| `README.md` | Clone/run paths for humans |
-| `server/README.md` / `mobile/ios/README.md` | Surface-specific ops |
+| `AGENTS.md` | Implementation invariants (this file) |
+| `CONTINUE_ON_MAC.md` | Mac clone/Xcode checklist and “what next” |
+| `README.md` | Clone/run for humans |
+| `server/README.md` / `mobile/ios/README.md` | Surface ops |
 
 If product direction changes, **update `plan.md` and `AGENTS.md` in the same change.**

@@ -9,3 +9,9 @@ server/workspace/notes.md
 server/workspace/drafts/
 server/workspace/.chitti/
 server/workspace/.odysseus/
+
+# Xcode (keep shared schemes; ignore user state)
+xcuserdata/
+*.xcuserstate
+DerivedData/
+mobile/ios/**/xcuserdata/
