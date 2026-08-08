@@ -10,7 +10,7 @@ the model answers in plain text.
 ## Layout
 
 ```
-odysseus/          the harness package
+odysseus/          the coding-agent harness package
   provider.py      the only file that knows about the model (Gemini) — HTTP,
                    wire format, and the Gemini 3 thoughtSignature round-trip
   loop.py          the agent loop: model -> tools -> results -> repeat, with
@@ -21,11 +21,16 @@ odysseus/          the harness package
   context.py       token estimation and compaction on the before_turn socket
   memory.py        the base system prompt and durable ODYSSEUS.md project memory
   skills.py        on-demand procedures loaded from skills/<name>/SKILL.md
-  __init__.py      package marker (filled in on a later day)
+  harness.py       composes the full coding agent
+server/            iPhone harness API (life-ops tools, SSE, approvals)
+mobile/ios/        SwiftUI thin client (chat, voice, approvals)
+skills/            shared skill packs (e.g. morning_prep)
+plan.md            iPhone harness product + delivery plan
 demos/             runnable examples
   day1_dice.py     the smallest complete agent: one tool, one loop, one answer
   day2_build.py    a coding agent with hands: build, run, and refuse safely
   day3_context.py  compaction, cross-conversation memory, and a voice skill
+  mobile_morning_prep.py  CLI client for the mobile harness API
 ```
 
 Everything outside `provider.py` speaks a small, neutral message format and
@@ -99,3 +104,21 @@ trips compaction mid-run, proves a remembered fact survives into a fresh
 conversation, and lets a `brand-voice` skill change the agent's voice with zero
 code changes. Each demo prints a trace of every step: the user prompt, the
 assistant's tool calls, the tool results, and the final answer.
+
+## Mobile harness (iPhone)
+
+Hybrid agent for tasks Siri is weak at: chat/voice UI on the phone, harness on
+your machine. See `plan.md` and `server/README.md`.
+
+```bash
+export ODYSSEUS_API_KEY=...          # model
+export CHITTI_API_KEY=dev-key-change-me
+python3 -m server                    # http://0.0.0.0:8787
+
+# other terminal
+export CHITTI_API_KEY=dev-key-change-me
+python3 demos/mobile_morning_prep.py
+```
+
+SwiftUI sources live under `mobile/ios/Chitti/` — open via a new Xcode app
+project on a Mac (see `mobile/ios/README.md`).

@@ -20,7 +20,7 @@ final class SpeechService: NSObject, ObservableObject {
             }
         }
         let mic: Bool = await withCheckedContinuation { cont in
-            AVAudioApplication.requestRecordPermission { ok in
+            AVAudioSession.sharedInstance().requestRecordPermission { ok in
                 cont.resume(returning: ok)
             }
         }

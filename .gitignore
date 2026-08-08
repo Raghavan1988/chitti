@@ -3,3 +3,9 @@ __pycache__/
 *.pyc
 .DS_Store
 .odysseus/
+.env
+server/workspace/CHITTI.md
+server/workspace/notes.md
+server/workspace/drafts/
+server/workspace/.chitti/
+server/workspace/.odysseus/
