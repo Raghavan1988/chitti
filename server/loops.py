@@ -55,6 +55,7 @@ COMMAND_TYPES = {
     "resolve_review",
     "externalize",
     "remember",
+    "clear_suggestions",
 }
 
 
@@ -537,6 +538,26 @@ class LoopEngine:
         fact = {"id": _new_id("fact"), "text": text, "ts": _now(), "source": source}
         self._facts.append(fact)
         return {"ok": True, "fact_id": fact["id"]}
+
+    def _cmd_clear_suggestions(self, payload: dict, source: str) -> dict:
+        """Remove a loop's AI suggestion drafts and reset its suggested action.
+
+        Deletes every ``kind == "suggestion"`` draft, blanks the AI-set
+        ``next_action`` headline, and forgets today's suggest idempotency so the
+        next Suggest tap regenerates a fresh action instead of returning a
+        now-deleted draft. Purely local and safe — it externalizes nothing and
+        the user can regenerate at will.
+        """
+        loop = self._require_loop(payload)
+        before = len(loop.drafts)
+        loop.drafts = [d for d in loop.drafts if d.get("kind") != "suggestion"]
+        removed = before - len(loop.drafts)
+        loop.next_action = ""
+        prefixes = (f"suggest-next:{loop.id}:", f"suggest-draft:{loop.id}:")
+        for key in [k for k in self._idem if k.startswith(prefixes)]:
+            del self._idem[key]
+        self._touch(loop, "suggestions_cleared", source, removed=removed)
+        return {"ok": True, "loop_id": loop.id, "removed": removed}
 
 
 # Process-wide singleton, mirroring server.store.store.

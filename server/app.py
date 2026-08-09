@@ -16,6 +16,7 @@ SignalLoop command bus + loop reads:
 
   POST /v1/commands                 {"type","payload","source","idempotency_key"}
   POST /v1/suggest                  {"loop_id"?: "..."}  draft today's next action(s)
+  GET  /v1/suggestions/today        active loops with a suggestion drafted today
   GET  /v1/loops
   GET  /v1/loops/{id}
   GET  /v1/status                   (?locked=1 -> privacy-safe projection)
@@ -34,7 +35,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from . import auth, suggester
+from . import auth, scheduler, suggester
 from .config import config
 from .loops import CommandError, LoopCommand, engine
 from .store import store
@@ -106,6 +107,8 @@ class ChittiHandler(BaseHTTPRequestHandler):
             return _send_json(self, 200, engine.status_board(locked=locked))
         if path == "/v1/reviews":
             return _send_json(self, 200, {"reviews": engine.list_reviews()})
+        if path == "/v1/suggestions/today":
+            return _send_json(self, 200, suggester.todays_suggestions())
         if path.startswith("/v1/loops/"):
             lid = path[len("/v1/loops/") :].strip("/")
             if "/" not in lid:
@@ -337,6 +340,7 @@ def serve_forever(host: str | None = None, port: int | None = None):
     print(f"  workdir: {config.workdir}")
     print(f"  policy:  {config.policy_mode}")
     print(f"  auth:    Bearer {config.api_key[:4]}…")
+    scheduler.start()
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

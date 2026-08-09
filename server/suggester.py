@@ -135,16 +135,19 @@ def suggest_for_loop(
              if d.get("kind") == "suggestion"),
             None,
         )
-        return {
-            "loop_id": lid,
-            "title": fresh.get("title"),
-            "next_action": fresh.get("next_action", ""),
-            "actions": [],
-            "why": "",
-            "draft_id": existing["id"] if existing else None,
-            "date": today,
-            "cached": True,
-        }
+        # Only short-circuit if the suggestion draft still exists. If it was
+        # cleared (clear_suggestions), fall through and regenerate a fresh one.
+        if existing is not None:
+            return {
+                "loop_id": lid,
+                "title": fresh.get("title"),
+                "next_action": fresh.get("next_action", ""),
+                "actions": [],
+                "why": "",
+                "draft_id": existing["id"],
+                "date": today,
+                "cached": True,
+            }
 
     if force:
         suffix = f":{int(time.time())}"
@@ -232,3 +235,37 @@ def suggest_active(
         suggest_for_loop(l, source=source, today=today, force=force) for l in loops
     ]
     return {"date": today, "count": len(suggested), "suggested": suggested}
+
+
+def todays_suggestions() -> dict:
+    """Return active loops that received a suggestion draft *today*.
+
+    This is the read the phone polls (on foreground / daily reminder) to decide
+    whether to raise a local notification — the compliant stand-in for a real
+    server→device push until the cloud wake plane + APNs exist. It never calls
+    the model; it just reports what the suggester already wrote back.
+    """
+    today = date.today().isoformat()
+    start = datetime.combine(date.today(), dtime.min).timestamp()
+    loops_out = []
+    for loop in engine.list_loops():
+        if loop.get("status") != "active":
+            continue
+        fresh = [
+            d
+            for d in loop.get("drafts", [])
+            if d.get("kind") == "suggestion" and (d.get("ts") or 0) >= start
+        ]
+        if not fresh:
+            continue
+        latest = fresh[-1]
+        loops_out.append(
+            {
+                "loop_id": loop["id"],
+                "title": loop.get("title"),
+                "next_action": loop.get("next_action", ""),
+                "draft_id": latest.get("id"),
+                "content": latest.get("content", ""),
+            }
+        )
+    return {"date": today, "count": len(loops_out), "loops": loops_out}

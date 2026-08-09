@@ -63,6 +63,7 @@ planning/policy lives in the LoopEngine, never in the caller.
 |--------|------|--------|
 | POST | `/v1/commands` | `{type, payload, source, idempotency_key}` → idempotent result |
 | POST | `/v1/suggest` | `{loop_id?, force?}` → draft today's suggested next action(s) |
+| GET | `/v1/suggestions/today` | active loops that received a suggestion draft today (the feed the phone polls) |
 | GET | `/v1/loops` | all loops (most-recent first) |
 | GET | `/v1/loops/{id}` | one loop |
 | GET | `/v1/status` | status board; `?locked=1` → privacy-safe projection |
@@ -70,7 +71,7 @@ planning/policy lives in the LoopEngine, never in the caller.
 
 **Command types:** `new_loop`, `update_loop`, `log_evidence`, `add_draft`,
 `pause`, `resume`, `approve_plan`, `mark_complete`, `request_review`,
-`resolve_review`, `externalize`, `remember`.
+`resolve_review`, `externalize`, `remember`, `clear_suggestions`.
 
 **Suggested actions:** `POST /v1/suggest` runs each active loop's context
 through the model and writes back the top `next_action` plus a review-safe
@@ -78,7 +79,29 @@ through the model and writes back the top `next_action` plus a review-safe
 (a same-day retry is a no-op that returns `cached: true` without a model call);
 pass `{"force": true}` for an intentional refresh, or `{"loop_id": "..."}` to
 target one loop. This is the reusable per-loop unit a daily **cloud wake** job
-will call; today it is triggered on demand.
+will call; today it is triggered on demand. The phone learns which loops were
+suggested today by polling `GET /v1/suggestions/today`. Send the
+`clear_suggestions` command (`{loop_id}`) to delete a loop's suggestion drafts,
+reset its AI `next_action`, and forget the per-day cache so the next Suggest
+regenerates a fresh action.
+
+**Daily scheduler (cloud-wake sketch):** `server/scheduler.py` is a dev-only
+stand-in for the approved cloud wake plane — the developer Mac is **not** a
+product "desktop agent node," so it is **off by default**. When enabled it wakes
+once per day and runs the same `suggest_active()` batch (drafts only, never
+externalizes). Env:
+
+| Var | Default | Meaning |
+|-----|---------|---------|
+| `CHITTI_SUGGEST_ENABLED` | `0` | `1` to run the daily scheduler |
+| `CHITTI_SUGGEST_HOUR` | `7` | local hour-of-day (0–23) to run |
+| `CHITTI_SUGGEST_ON_START` | `0` | `1` to also run once immediately (dev/test) |
+
+**Proactive UX (notifications):** with no APNs/cloud-wake yet, the iOS app uses
+**local** notifications as the honest stand-in — a daily reminder to review
+suggestions, plus a one-off banner when a foreground refresh discovers a *fresh*
+suggestion (deduped by draft id, and only after the user grants permission). It
+only nudges; it never sends or acts.
 
 **Safety:** `externalize` (send/post/commit a draft) requires a `review_token`
 minted by `resolve_review`; without a valid token it refuses safely. Smoke:
