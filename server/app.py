@@ -12,6 +12,14 @@ Endpoints (all require Authorization: Bearer <CHITTI_API_KEY>):
   GET  /v1/memory
   PUT  /v1/memory                   {"text": "..."}  full replace
 
+SignalLoop command bus + loop reads:
+
+  POST /v1/commands                 {"type","payload","source","idempotency_key"}
+  GET  /v1/loops
+  GET  /v1/loops/{id}
+  GET  /v1/status                   (?locked=1 -> privacy-safe projection)
+  GET  /v1/reviews                  pending consequential-action reviews
+
 No third-party web framework: ThreadingHTTPServer + JSON + text/event-stream.
 """
 
@@ -23,10 +31,11 @@ import threading
 import traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 from . import auth
 from .config import config
+from .loops import CommandError, LoopCommand, engine
 from .store import store
 from .tools_mobile import MEMORY_FILE
 
@@ -88,6 +97,21 @@ class ChittiHandler(BaseHTTPRequestHandler):
             return _send_json(self, 401, {"error": "unauthorized"})
         if path == "/v1/memory":
             return self._get_memory()
+        if path == "/v1/loops":
+            return _send_json(self, 200, {"loops": engine.list_loops()})
+        if path == "/v1/status":
+            query = parse_qs(urlparse(self.path).query)
+            locked = (query.get("locked", ["0"])[0]).lower() in ("1", "true", "yes")
+            return _send_json(self, 200, engine.status_board(locked=locked))
+        if path == "/v1/reviews":
+            return _send_json(self, 200, {"reviews": engine.list_reviews()})
+        if path.startswith("/v1/loops/"):
+            lid = path[len("/v1/loops/") :].strip("/")
+            if "/" not in lid:
+                loop = engine.get_loop(lid)
+                if not loop:
+                    return _send_json(self, 404, {"error": "loop not found"})
+                return _send_json(self, 200, loop)
         if path.startswith("/v1/sessions/") and path.endswith("/events"):
             sid = path[len("/v1/sessions/") : -len("/events")].strip("/")
             return self._sse(sid)
@@ -119,6 +143,9 @@ class ChittiHandler(BaseHTTPRequestHandler):
                     "session_path": live.harness.session_path,
                 },
             )
+
+        if path == "/v1/commands":
+            return self._post_command(body)
 
         # /v1/sessions/{id}/messages
         if path.startswith("/v1/sessions/") and path.endswith("/messages"):
@@ -153,6 +180,19 @@ class ChittiHandler(BaseHTTPRequestHandler):
         return _send_json(self, 404, {"error": "not found"})
 
     # --- handlers ---
+
+    def _post_command(self, body: dict):
+        """LoopCommandBus entry point: translate a command dict and apply it.
+
+        Adapters (Siri/Share/Widget) POST here; all planning/policy lives in the
+        LoopEngine, never in this transport.
+        """
+        try:
+            cmd = LoopCommand.from_dict(body)
+            result = engine.apply(cmd)
+        except CommandError as e:
+            return _send_json(self, 400, {"error": str(e)})
+        return _send_json(self, 200, result)
 
     def _get_memory(self):
         mem = Path(config.workdir) / MEMORY_FILE

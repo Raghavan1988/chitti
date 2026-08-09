@@ -2,7 +2,7 @@
 """Config loaded from environment variables.
 
 CHITTI_API_KEY gates every request (solo-dev auth). ODYSSEUS_API_KEY /
-GEMINI_API_KEY unlock the model via the existing Odysseus provider.
+OPENAI_API_KEY unlock the model via the existing Odysseus provider.
 """
 
 import os
@@ -38,6 +38,12 @@ class Config:
         self.workdir.mkdir(parents=True, exist_ok=True)
         skills_dst = self.workdir / "skills"
         skills_src = REPO_ROOT / "skills"
+        # Heal a stale or broken skills symlink (e.g. one left over from a
+        # different host, where the old absolute target no longer resolves).
+        if skills_dst.is_symlink():
+            points_elsewhere = skills_dst.resolve(strict=False) != skills_src.resolve(strict=False)
+            if points_elsewhere or not skills_dst.exists():
+                skills_dst.unlink()
         if not skills_dst.exists() and skills_src.is_dir():
             try:
                 skills_dst.symlink_to(skills_src, target_is_directory=True)
