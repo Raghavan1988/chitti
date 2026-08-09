@@ -7,7 +7,7 @@ demo hand-writes both so the shape is visible before day 2's decorators hide
 it, then runs a task that forces exactly one tool call and one text answer.
 
 Design rule: the schema is the contract. `count` is declared a string because
-that is how Gemini reliably returns function arguments here; .run coerces it.
+the harness types every tool argument as a string on the wire; .run coerces it.
 """
 
 import random
