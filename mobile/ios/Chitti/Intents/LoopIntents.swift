@@ -94,6 +94,21 @@ struct LogEvidenceIntent: AppIntent {
     }
 }
 
+/// Quick Note = the compliant "note after a call/meeting" adapter. It writes a
+/// durable fact to global memory (a local, reversible operation). SignalLoop
+/// never auto-detects calls or reads their content — the user speaks the note.
+struct QuickNoteIntent: AppIntent {
+    static var title: LocalizedStringResource = "Quick Note"
+    static var description = IntentDescription("Save a quick note to SignalLoop's memory.")
+
+    @Parameter(title: "Note") var note: String
+
+    func perform() async throws -> some IntentResult & ProvidesDialog {
+        _ = try await LoopCommandBus.fromDefaults().remember(text: note, source: .siri)
+        return .result(dialog: "Saved your note.")
+    }
+}
+
 struct StatusIntent: AppIntent {
     static var title: LocalizedStringResource = "Loop Status"
     static var description = IntentDescription("Speak a privacy-safe summary of open loops.")
@@ -182,6 +197,15 @@ struct SignalLoopShortcuts: AppShortcutsProvider {
             ],
             shortTitle: "New Loop",
             systemImageName: "plus.circle"
+        )
+        AppShortcut(
+            intent: QuickNoteIntent(),
+            phrases: [
+                "Save a note in \(.applicationName)",
+                "Note this in \(.applicationName)",
+            ],
+            shortTitle: "Quick Note",
+            systemImageName: "square.and.pencil"
         )
     }
 }

@@ -55,8 +55,9 @@ mobile/ios/
 | Chat + voice + server tools | **Loop** list/detail UI |
 | Approval cards for server tools | **ReviewAction** + foreground review for send/post/calendar |
 | Settings → API | **LoopCommandBus** (core without AppIntents) |
-| — | App Intents: NewLoop, LogEvidence, Status, Pause/Resume, ApprovePlan, ReviewAction, MarkComplete |
+| — | App Intents: NewLoop, LogEvidence, Status, Pause/Resume, ApprovePlan, ReviewAction, MarkComplete, **QuickNote** |
 | — | In-app twin for every intent (standalone parity) |
+| — | Proactive UX: **Suggest actions** (per-loop + all) shown in a **Suggested actions** section with **Clear suggestions**, **Quick Capture** (note → memory or loop), local notifications (daily review + capture nudges) |
 
 Do **not** implement planning inside intent handlers. Do **not** add a general Siri “Approve send.”
 

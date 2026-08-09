@@ -73,6 +73,12 @@ final class APIClient {
         try await request(path: path, method: "GET", body: nil)
     }
 
+    /// Generic JSON POST returning raw data for Codable decoding.
+    func postData(path: String, body: [String: Any]) async throws -> Data {
+        let data = try JSONSerialization.data(withJSONObject: body)
+        return try await request(path: path, method: "POST", body: data)
+    }
+
     private func request(path: String, method: String, body: Data?) async throws -> Data {
         guard let url = URL(string: path, relativeTo: baseURL)?.absoluteURL else {
             throw APIError.badURL
