@@ -6,6 +6,7 @@ import SwiftUI
 struct LoopListView: View {
     @EnvironmentObject var store: LoopStore
     @State private var showingNew = false
+    @State private var showingCapture = false
 
     var body: some View {
         NavigationStack {
@@ -52,6 +53,27 @@ struct LoopListView: View {
                 LoopDetailView(loopId: id)
             }
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        Task { await store.suggest() }
+                    } label: {
+                        if store.isSuggesting {
+                            ProgressView()
+                        } else {
+                            Image(systemName: "sparkles")
+                        }
+                    }
+                    .accessibilityLabel("Suggest actions for all active loops")
+                    .disabled(store.isSuggesting || store.loops.isEmpty)
+                }
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        showingCapture = true
+                    } label: {
+                        Image(systemName: "square.and.pencil")
+                    }
+                    .accessibilityLabel("Quick capture a note")
+                }
                 ToolbarItem(placement: .primaryAction) {
                     Button {
                         showingNew = true
@@ -65,6 +87,12 @@ struct LoopListView: View {
             .task { await store.refresh() }
             .sheet(isPresented: $showingNew) {
                 NewLoopSheet().environmentObject(store)
+            }
+            .sheet(isPresented: $showingCapture) {
+                QuickCaptureSheet().environmentObject(store)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .chittiOpenQuickCapture)) { _ in
+                showingCapture = true
             }
         }
     }
@@ -111,6 +139,67 @@ struct Badge: View {
             .padding(.horizontal, 6).padding(.vertical, 2)
             .background(tint.opacity(0.15), in: Capsule())
             .foregroundStyle(tint)
+    }
+}
+
+// Quick Capture in-app twin (of the Quick Note intent): a one-tap note that
+// lands in global memory or a chosen loop's evidence. Tap the keyboard mic to
+// dictate. Capture is always user-initiated — never scraped from calls/apps.
+struct QuickCaptureSheet: View {
+    @EnvironmentObject var store: LoopStore
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var note = ""
+    @State private var targetId = ""   // "" == global memory
+    @State private var submitting = false
+
+    private var activeLoops: [Loop] {
+        store.loops.filter { $0.status != "done" }
+    }
+
+    private var trimmed: String {
+        note.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Quick note") {
+                    TextField("What happened? Tap the mic to dictate.", text: $note, axis: .vertical)
+                        .lineLimit(3...8)
+                }
+                Section("Save to") {
+                    Picker("Destination", selection: $targetId) {
+                        Text("Global memory").tag("")
+                        ForEach(activeLoops) { loop in
+                            Text(loop.title).tag(loop.id)
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Quick Capture")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        Task {
+                            submitting = true
+                            if targetId.isEmpty {
+                                await store.remember(text: trimmed)
+                            } else {
+                                await store.logEvidence(loopId: targetId, text: trimmed)
+                            }
+                            submitting = false
+                            dismiss()
+                        }
+                    }
+                    .disabled(trimmed.isEmpty || submitting)
+                }
+            }
+        }
     }
 }
 

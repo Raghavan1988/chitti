@@ -15,14 +15,23 @@ struct LoopDetailView: View {
     @State private var reviewDraft: Draft?
     @State private var photoItem: PhotosPickerItem?
     @State private var showCamera = false
+    @State private var showClearConfirm = false
 
     private var loop: Loop? { store.loops.first(where: { $0.id == loopId }) }
+
+    // The most recent AI suggestion draft — surfaced prominently so tapping
+    // "Suggest actions" / "New suggestion" produces a visible result instead of
+    // a silently-appended draft buried at the bottom of the form.
+    private var latestSuggestion: Draft? {
+        loop?.drafts.last(where: { $0.kind == "suggestion" })
+    }
 
     var body: some View {
         Group {
             if let loop {
                 Form {
                     header(loop)
+                    suggestionSection(loop)
                     actions(loop)
                     evidenceSection(loop)
                     draftsSection(loop)
@@ -53,6 +62,34 @@ struct LoopDetailView: View {
                 Task { await store.logPhoto(loopId: loopId, label: "[camera photo]", pointer: nil) }
             }
         }
+        .confirmationDialog(
+            "Clear all suggested actions for this loop?",
+            isPresented: $showClearConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Clear suggestions", role: .destructive) {
+                Task { await store.clearSuggestions(loopId: loopId) }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Removes the AI suggestions and resets today's suggested action. You can generate a new one anytime.")
+        }
+    }
+
+    @ViewBuilder
+    private func suggestionSection(_ loop: Loop) -> some View {
+        if let suggestion = latestSuggestion {
+            Section {
+                SuggestionContent(text: suggestion.content)
+                Button(role: .destructive) {
+                    showClearConfirm = true
+                } label: {
+                    Label("Clear suggestions", systemImage: "trash")
+                }
+            } header: {
+                Label("Suggested actions", systemImage: "sparkles")
+            }
+        }
     }
 
     @ViewBuilder
@@ -80,6 +117,24 @@ struct LoopDetailView: View {
     @ViewBuilder
     private func actions(_ loop: Loop) -> some View {
         Section("Actions") {
+            Button {
+                Task { await store.suggest(loopId: loop.id) }
+            } label: {
+                if store.isSuggesting {
+                    HStack(spacing: 8) { ProgressView(); Text("Suggesting…") }
+                } else {
+                    Label("Suggest actions", systemImage: "sparkles")
+                }
+            }
+            .disabled(store.isSuggesting)
+            if !loop.next_action.isEmpty {
+                Button {
+                    Task { await store.suggest(loopId: loop.id, force: true) }
+                } label: {
+                    Label("New suggestion", systemImage: "arrow.clockwise")
+                }
+                .disabled(store.isSuggesting)
+            }
             if loop.isPaused {
                 Button { Task { await store.resume(loopId: loop.id) } } label: {
                     Label("Resume", systemImage: "play.circle")
@@ -143,9 +198,12 @@ struct LoopDetailView: View {
 
     @ViewBuilder
     private func draftsSection(_ loop: Loop) -> some View {
-        if !loop.drafts.isEmpty {
+        // Suggestions render in their own "Suggested actions" section above;
+        // this section is only for reviewable/sendable drafts (email/post/note).
+        let sendable = loop.drafts.filter { $0.kind != "suggestion" }
+        if !sendable.isEmpty {
             Section("Drafts") {
-                ForEach(loop.drafts) { draft in
+                ForEach(sendable) { draft in
                     VStack(alignment: .leading, spacing: 6) {
                         Text(draft.content).font(.subheadline).lineLimit(4)
                         HStack {
@@ -163,6 +221,40 @@ struct LoopDetailView: View {
                 }
             }
         }
+    }
+}
+
+// Renders a suggestion draft's content — a short "Suggested actions" list plus
+// an optional "Why:" line — as a readable, non-sendable recommendation. Falls
+// back to plain lines for any non-bulleted model output.
+struct SuggestionContent: View {
+    let text: String
+
+    private var lines: [String] {
+        text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ForEach(Array(lines.enumerated()), id: \.offset) { _, raw in
+                let line = raw.trimmingCharacters(in: .whitespaces)
+                if line.isEmpty || line.lowercased().hasPrefix("suggested actions") {
+                    EmptyView()
+                } else if line.hasPrefix("- ") || line.hasPrefix("• ") {
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: "checkmark.circle")
+                            .foregroundStyle(.blue)
+                        Text(line.dropFirst(2)).font(.subheadline)
+                    }
+                } else if line.lowercased().hasPrefix("why:") {
+                    Text(line).font(.caption).foregroundStyle(.secondary)
+                } else {
+                    Text(line).font(.subheadline)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 2)
     }
 }
 
