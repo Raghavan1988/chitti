@@ -62,6 +62,7 @@ planning/policy lives in the LoopEngine, never in the caller.
 | Method | Path | Notes |
 |--------|------|--------|
 | POST | `/v1/commands` | `{type, payload, source, idempotency_key}` → idempotent result |
+| POST | `/v1/suggest` | `{loop_id?, force?}` → draft today's suggested next action(s) |
 | GET | `/v1/loops` | all loops (most-recent first) |
 | GET | `/v1/loops/{id}` | one loop |
 | GET | `/v1/status` | status board; `?locked=1` → privacy-safe projection |
@@ -70,6 +71,14 @@ planning/policy lives in the LoopEngine, never in the caller.
 **Command types:** `new_loop`, `update_loop`, `log_evidence`, `add_draft`,
 `pause`, `resume`, `approve_plan`, `mark_complete`, `request_review`,
 `resolve_review`, `externalize`, `remember`.
+
+**Suggested actions:** `POST /v1/suggest` runs each active loop's context
+through the model and writes back the top `next_action` plus a review-safe
+`suggestion` draft — never externalizing. It is **idempotent per loop-per-day**
+(a same-day retry is a no-op that returns `cached: true` without a model call);
+pass `{"force": true}` for an intentional refresh, or `{"loop_id": "..."}` to
+target one loop. This is the reusable per-loop unit a daily **cloud wake** job
+will call; today it is triggered on demand.
 
 **Safety:** `externalize` (send/post/commit a draft) requires a `review_token`
 minted by `resolve_review`; without a valid token it refuses safely. Smoke:

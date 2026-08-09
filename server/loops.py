@@ -208,6 +208,15 @@ class LoopEngine:
             loop = self._loops.get(loop_id)
             return asdict(loop) if loop else None
 
+    def seen(self, idempotency_key: str) -> bool:
+        """True if this idempotency key has already produced a recorded effect.
+
+        Lets server-layer callers (e.g. the suggester) skip redoing expensive
+        work — like a model call — when a per-day command was already applied.
+        """
+        with self._lock:
+            return idempotency_key in self._idem
+
     def list_reviews(self, pending_only: bool = True) -> list[dict]:
         with self._lock:
             revs = self._reviews.values()

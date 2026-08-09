@@ -15,6 +15,7 @@ Endpoints (all require Authorization: Bearer <CHITTI_API_KEY>):
 SignalLoop command bus + loop reads:
 
   POST /v1/commands                 {"type","payload","source","idempotency_key"}
+  POST /v1/suggest                  {"loop_id"?: "..."}  draft today's next action(s)
   GET  /v1/loops
   GET  /v1/loops/{id}
   GET  /v1/status                   (?locked=1 -> privacy-safe projection)
@@ -33,7 +34,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from . import auth
+from . import auth, suggester
 from .config import config
 from .loops import CommandError, LoopCommand, engine
 from .store import store
@@ -147,6 +148,9 @@ class ChittiHandler(BaseHTTPRequestHandler):
         if path == "/v1/commands":
             return self._post_command(body)
 
+        if path == "/v1/suggest":
+            return self._post_suggest(body)
+
         # /v1/sessions/{id}/messages
         if path.startswith("/v1/sessions/") and path.endswith("/messages"):
             sid = path[len("/v1/sessions/") : -len("/messages")].strip("/")
@@ -194,7 +198,24 @@ class ChittiHandler(BaseHTTPRequestHandler):
             return _send_json(self, 400, {"error": str(e)})
         return _send_json(self, 200, result)
 
-    def _get_memory(self):
+    def _post_suggest(self, body: dict):
+        """Draft today's suggested next action(s) for one or all active loops.
+
+        A server-layer stand-in for the daily cloud-wake job: it only drafts
+        suggestions (``next_action`` + a review-safe draft) via the command bus
+        and never externalizes. A model/provider failure becomes a clean 502,
+        not a crash.
+        """
+        loop_id = (body.get("loop_id") or "").strip() or None
+        force = bool(body.get("force"))
+        try:
+            result = suggester.suggest_active(loop_id, force=force)
+        except KeyError as e:
+            return _send_json(self, 404, {"error": f"loop not found: {e.args[0]}"})
+        except Exception as e:
+            traceback.print_exc()
+            return _send_json(self, 502, {"error": f"suggest failed: {e}"})
+        return _send_json(self, 200, result)
         mem = Path(config.workdir) / MEMORY_FILE
         text = mem.read_text(encoding="utf-8") if mem.is_file() else ""
         return _send_json(self, 200, {"text": text, "file": MEMORY_FILE})
