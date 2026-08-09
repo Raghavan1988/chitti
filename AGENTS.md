@@ -85,7 +85,7 @@ When unsure, read `plan.md` sections 1–2, 4, and 11.
 
 - **Stdlib only** — no third-party packages.  
 - Neutral message format only outside `provider.py`.  
-- Provider is the sole Gemini/HTTP seam.  
+- Provider is the sole OpenAI/HTTP seam.  
 - Loop never crashes on tools; errors become tool results.  
 - Do not turn Odysseus into SignalLoop; reuse **patterns**, not product UI.  
 - Must not gain AppIntents or Siri dependencies.
@@ -140,7 +140,7 @@ Career and life share **one** store and engine.
 ## Testing expectations
 
 - Smoke tests without API keys where possible (tools, auth, loop CRUD, command idempotency).  
-- Model demos: document `ODYSSEUS_API_KEY` / `GEMINI_API_KEY`.  
+- Model demos: document `ODYSSEUS_API_KEY` / `OPENAI_API_KEY`.  
 - Mobile: `scripts/run-server.sh`, `scripts/smoke-api.sh`, `demos/mobile_morning_prep.py`.  
 - For Siri work: assert **in-app parity** and that core packages do not import AppIntents.  
 - Do not claim iOS build green on Linux.

@@ -19,7 +19,7 @@ You are picking up **SignalLoop** development on a Mac. This repo was prepared s
 - macOS with **Xcode 15+** (iOS 17+ SDK)
 - Apple ID (free OK for personal device)
 - Python 3.10+
-- `ODYSSEUS_API_KEY` or `GEMINI_API_KEY` (model)
+- `ODYSSEUS_API_KEY` or `OPENAI_API_KEY` (model)
 - iPhone on same Wi‑Fi as Mac (for device testing)
 
 ## 1. Clone
@@ -40,7 +40,7 @@ cp .env.example .env
 ## 2. Start the harness API (same Mac)
 
 ```bash
-export ODYSSEUS_API_KEY=your_key_here   # or GEMINI_API_KEY
+export ODYSSEUS_API_KEY=your_key_here   # or OPENAI_API_KEY
 export CHITTI_API_KEY=dev-key-change-me
 chmod +x scripts/*.sh
 ./scripts/run-server.sh

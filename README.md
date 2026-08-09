@@ -19,7 +19,7 @@ An *agent* is a conversation that runs itself: call a model, run tools, feed res
 git clone https://github.com/Raghavan1988/chitti.git
 cd chitti
 
-export ODYSSEUS_API_KEY=your_key_here   # or GEMINI_API_KEY
+export ODYSSEUS_API_KEY=your_key_here   # or OPENAI_API_KEY
 export CHITTI_API_KEY=dev-key-change-me
 chmod +x scripts/*.sh
 ./scripts/run-server.sh                 # leave running; note LAN URL
@@ -81,13 +81,13 @@ CONTINUE_ON_MAC.md        handoff checklist for Mac + Xcode
 Standard library only, Python 3.10+.
 
 ```bash
-export ODYSSEUS_API_KEY=...   # or GEMINI_API_KEY
+export ODYSSEUS_API_KEY=...   # or OPENAI_API_KEY
 python3 demos/day1_dice.py
 python3 demos/day2_build.py
 python3 demos/day3_context.py
 ```
 
-Neutral messages: user / assistant(+tool_calls) / tool. Only `provider.py` speaks HTTP/Gemini.
+Neutral messages: user / assistant(+tool_calls) / tool. Only `provider.py` speaks HTTP/OpenAI.
 
 | File | Role |
 |------|------|
@@ -121,7 +121,7 @@ python3 demos/mobile_morning_prep.py
 
 | Variable | Purpose | Default |
 |----------|---------|---------|
-| `ODYSSEUS_API_KEY` / `GEMINI_API_KEY` | Model | required for agent turns |
+| `ODYSSEUS_API_KEY` / `OPENAI_API_KEY` | Model | required for agent turns |
 | `CHITTI_API_KEY` | App ↔ server auth | `dev-key-change-me` |
 | `CHITTI_HOST` / `CHITTI_PORT` | Server bind | `0.0.0.0` / `8787` |
 | `CHITTI_POLICY` | `read-only` / `safe` / `yolo` | `safe` |
