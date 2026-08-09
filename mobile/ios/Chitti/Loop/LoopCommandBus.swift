@@ -136,6 +136,11 @@ final class LoopCommandBus {
         try await send("remember", ["text": text], source: source)
     }
 
+    @discardableResult
+    func clearSuggestions(loopId: String, source: CommandSource = .app) async throws -> LoopCommandResult {
+        try await send("clear_suggestions", ["loop_id": loopId], source: source)
+    }
+
     // -- reads --
 
     func listLoops() async throws -> [Loop] {
@@ -157,5 +162,26 @@ final class LoopCommandBus {
     func pendingReviews() async throws -> [Review] {
         let data = try await api.getData(path: "/v1/reviews")
         return try JSONDecoder().decode(ReviewsResponse.self, from: data).reviews
+    }
+
+    // -- suggestions (server-layer "give me next action(s)"; still command-bus
+    //    backed writes, so the engine stays the source of truth) --
+
+    /// Ask the server to draft today's suggested next action(s). Pass a
+    /// `loopId` to target one loop, or nil for every active loop. `force`
+    /// refreshes even if a suggestion already exists for today.
+    @discardableResult
+    func suggest(loopId: String? = nil, force: Bool = false) async throws -> SuggestResponse {
+        var body: [String: Any] = [:]
+        if let loopId { body["loop_id"] = loopId }
+        if force { body["force"] = true }
+        let data = try await api.postData(path: "/v1/suggest", body: body)
+        return try JSONDecoder().decode(SuggestResponse.self, from: data)
+    }
+
+    /// Active loops that received a suggestion draft today (for notifications).
+    func todaysSuggestions() async throws -> TodayFeed {
+        let data = try await api.getData(path: "/v1/suggestions/today")
+        return try JSONDecoder().decode(TodayFeed.self, from: data)
     }
 }

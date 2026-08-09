@@ -79,3 +79,35 @@ struct StatusBoard: Codable, Equatable {
 // Response envelopes.
 struct LoopsResponse: Codable { let loops: [Loop] }
 struct ReviewsResponse: Codable { let reviews: [Review] }
+
+/// One loop's result from POST /v1/suggest.
+struct SuggestResult: Codable {
+    let loop_id: String
+    var next_action: String
+    var draft_id: String?
+    var cached: Bool?
+}
+
+/// POST /v1/suggest response (one or all active loops).
+struct SuggestResponse: Codable {
+    let date: String
+    let count: Int
+    let suggested: [SuggestResult]
+}
+
+/// One entry in GET /v1/suggestions/today (a loop suggested today).
+struct TodaySuggestion: Codable, Identifiable {
+    let loop_id: String
+    var title: String?
+    var next_action: String
+    var draft_id: String?
+    var id: String { loop_id }
+}
+
+/// GET /v1/suggestions/today response — the feed the phone polls to decide
+/// whether to raise a local notification about fresh suggestions.
+struct TodayFeed: Codable {
+    let date: String
+    let count: Int
+    let loops: [TodaySuggestion]
+}
