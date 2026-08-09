@@ -244,7 +244,6 @@ No `bash`, no desktop click, no Mac spawn.
 | `opportunity` | career — research role/lab, map proof gaps |
 | `weekly_proof` | career — scope and ship one artifact |
 | `outreach_after_proof` | career — draft only post-proof |
-| `admin_dispute` | life — bills, claims, landlord |
 | `trip_onsite` | both — travel + interview/life logistics |
 | `life_admin` | life — letter/photo → deadlines + drafts |
 
@@ -291,16 +290,16 @@ No `bash`, no desktop click, no Mac spawn.
 - [ ] Rename/brand UI copy toward SignalLoop (incremental)
 
 ### Phase 1 — Loop core + command bus
-- [ ] Persist `Loop` + `LoopCommand` (idempotent)  
-- [ ] LoopEngine + tools: loop CRUD, evidence, remember  
-- [ ] Skills: `opportunity`, `admin_dispute`  
-- [ ] In-app review sheet for externalize  
+- [x] Persist `Loop` + `LoopCommand` (idempotent)  
+- [x] LoopEngine + tools: loop CRUD, evidence, remember  
+- [x] Skills: `opportunity`  
+- [x] In-app review sheet for externalize  
 
 ### Phase 2 — Multi-surface adapters (parity first)
-- [ ] SwiftUI: loop list/detail, log, status, review  
-- [ ] App Intents: NewLoop, LogEvidence, Status, Pause/Resume, ApprovePlan, ReviewAction, MarkComplete  
-- [ ] Share + camera → LogEvidence-equivalent command  
-- [ ] **Prove every intent has UI twin**  
+- [x] SwiftUI: loop list/detail, log, status, review  
+- [x] App Intents: NewLoop, LogEvidence, Status, Pause/Resume, ApprovePlan, ReviewAction, MarkComplete  
+- [x] Share + camera → LogEvidence-equivalent command  
+- [x] **Prove every intent has UI twin**  
 
 ### Phase 3 — Cloud wake plane
 - [ ] Scheduled/retrieval jobs (Gmail read, web, LLM plan/draft)  
@@ -353,7 +352,7 @@ No `bash`, no desktop click, no Mac spawn.
 2. Define `LoopCommand` schema + idempotency in store (server and/or iOS).  
 3. Implement LoopEngine operations behind the bus (no AppIntents imports in core).  
 4. In-app UI for all v1 commands **before** or **with** Siri adapters.  
-5. Skills: `opportunity`, `admin_dispute`.  
+5. Skills: `opportunity`.  
 6. Never add Mac-node tools or Siri-only core workflows without revising this plan.
 
 ---
