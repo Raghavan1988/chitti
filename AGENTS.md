@@ -109,7 +109,7 @@ When unsure, read `plan.md` sections 1–2, 4, and 11.
 ### Skills
 
 - `skills/<name>/SKILL.md` with optional `description:` line.  
-- Prefer: `opportunity`, `weekly_proof`, `admin_dispute`, `trip_onsite`, `outreach_after_proof`.
+- Prefer: `opportunity`, `weekly_proof`, `trip_onsite`, `outreach_after_proof`.
 
 ---
 
