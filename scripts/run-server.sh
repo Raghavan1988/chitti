@@ -18,8 +18,8 @@ export CHITTI_PORT="${CHITTI_PORT:-8787}"
 export CHITTI_API_KEY="${CHITTI_API_KEY:-dev-key-change-me}"
 export CHITTI_POLICY="${CHITTI_POLICY:-safe}"
 
-if [[ -z "${ODYSSEUS_API_KEY:-}" && -z "${GEMINI_API_KEY:-}" ]]; then
-  echo "error: set ODYSSEUS_API_KEY or GEMINI_API_KEY (model access)." >&2
+if [[ -z "${ODYSSEUS_API_KEY:-}" && -z "${OPENAI_API_KEY:-}" ]]; then
+  echo "error: set ODYSSEUS_API_KEY or OPENAI_API_KEY (model access)." >&2
   echo "  export ODYSSEUS_API_KEY=..." >&2
   exit 1
 fi
@@ -48,5 +48,23 @@ echo "iPhone Settings → Base URL = http://<mac-lan-ip>:${CHITTI_PORT}"
 echo "                 API key  = ${CHITTI_API_KEY}"
 echo "Simulator can use          http://127.0.0.1:${CHITTI_PORT}"
 echo
+# The server uses PEP 604 (`X | None`) syntax, so require Python 3.10+.
+# Honor a PYTHON override; otherwise pick the first suitable interpreter.
+if [[ -z "${PYTHON:-}" ]]; then
+  for cand in python3.13 python3.12 python3.11 python3.10 python3; do
+    if command -v "$cand" >/dev/null 2>&1 \
+      && "$cand" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)'; then
+      PYTHON="$cand"
+      break
+    fi
+  done
+fi
+if [[ -z "${PYTHON:-}" ]]; then
+  echo "error: need Python 3.10+ (default python3 is $(python3 --version 2>&1))." >&2
+  echo "  install e.g. 'brew install python@3.12' or set PYTHON=/path/to/python3.10+" >&2
+  exit 1
+fi
+echo "  python:   $("$PYTHON" --version 2>&1)"
+echo
 echo "Starting server (Ctrl+C to stop)…"
-exec python3 -m server
+exec "$PYTHON" -m server
