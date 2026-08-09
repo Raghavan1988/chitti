@@ -9,7 +9,7 @@ Mac handoff: [`CONTINUE_ON_MAC.md`](../../CONTINUE_ON_MAC.md).
 - Mac with **Xcode 15+** (iOS 17 SDK)
 - Apple ID for signing
 - Python 3.10+ (for local `./scripts/run-server.sh`)
-- Model API key: `ODYSSEUS_API_KEY` or `GEMINI_API_KEY`
+- Model API key: `ODYSSEUS_API_KEY` or `OPENAI_API_KEY`
 
 ## Run (Mac)
 
@@ -66,7 +66,7 @@ Do **not** implement planning inside intent handlers. Do **not** add a general S
 |-------|-----|
 | Cannot connect | Same Wi‑Fi? LAN IP? Server up? Firewall? |
 | 401 | API key mismatch |
-| No model reply | `ODYSSEUS_API_KEY` / `GEMINI_API_KEY` on server |
+| No model reply | `ODYSSEUS_API_KEY` / `OPENAI_API_KEY` on server |
 | Signing | Team + unique bundle id + trust cert on device |
 | Cleartext HTTP | Info.plist allows local networking; use `http://` LAN IP |
 
