@@ -26,6 +26,10 @@
 	<string>Chitti uses the mic for push-to-talk so you can run personal ops tasks by voice.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Chitti transcribes your voice to send tasks to the agent harness.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>SignalLoop uses the camera to capture photo evidence for a loop.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>SignalLoop attaches photos from your library as evidence for a loop.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>

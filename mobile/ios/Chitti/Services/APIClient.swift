@@ -60,6 +60,19 @@ final class APIClient {
         return text
     }
 
+    /// Generic JSON POST used by the LoopCommandBus (reuses the auth header).
+    func postJSON(path: String, body: [String: Any]) async throws -> [String: Any] {
+        let data = try JSONSerialization.data(withJSONObject: body)
+        let out = try await request(path: path, method: "POST", body: data)
+        let obj = try JSONSerialization.jsonObject(with: out)
+        return (obj as? [String: Any]) ?? [:]
+    }
+
+    /// Generic JSON GET returning raw data for Codable decoding.
+    func getData(path: String) async throws -> Data {
+        try await request(path: path, method: "GET", body: nil)
+    }
+
     private func request(path: String, method: String, body: Data?) async throws -> Data {
         guard let url = URL(string: path, relativeTo: baseURL)?.absoluteURL else {
             throw APIError.badURL
