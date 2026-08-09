@@ -9,7 +9,7 @@ final line and repairs a dangling tool call into a valid transcript.
 Design rules:
   - Append-only and line-oriented. One JSON object per line means a crash can
     only ever corrupt the last line, never the history before it.
-  - Always return a valid transcript. Gemini rejects an assistant tool call with
+  - Always return a valid transcript. OpenAI rejects an assistant tool call with
     no matching tool result; repair() manufactures the missing results so a
     resumed conversation is well-formed on the first turn.
 """
@@ -78,7 +78,7 @@ def _repair(messages):
 
     Find the last assistant turn, count the tool results that already follow it,
     and synthesize an "interrupted" result for each of its tool calls beyond that
-    count — the exact pairing Gemini requires to accept the next turn.
+    count — the exact pairing OpenAI requires to accept the next turn.
     """
     last = None
     for i in range(len(messages) - 1, -1, -1):

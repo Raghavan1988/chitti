@@ -3,7 +3,7 @@
 
 Concept: an agent is a conversation that runs itself. The loop calls the
 model, executes any tools it asks for, feeds the results back, and repeats
-until the model answers in plain text. Nothing here is Gemini-specific — it
+until the model answers in plain text. Nothing here is provider-specific — it
 speaks only the neutral message format and the provider's return shape.
 
 Design rules:

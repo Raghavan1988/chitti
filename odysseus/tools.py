@@ -41,7 +41,7 @@ def tool(description, **params):
     Argument names become string-typed properties; arguments without a default
     are required. Per-parameter help text comes from the keyword arguments here
     (e.g. tool("...", path="the file to read")). All parameters are strings on
-    purpose — Gemini returns function arguments as strings most reliably.
+    purpose — a uniform schema keeps argument handling simple across models.
     """
     def decorate(fn):
         code = fn.__code__

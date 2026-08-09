@@ -1,17 +1,18 @@
-# The Gemini client: the only file that speaks HTTP and vendor wire format.
+# The OpenAI client: the only file that speaks HTTP and vendor wire format.
 """Day 1 — the provider: the single seam between Odysseus and the model.
 
 Concept: every other file in the harness speaks a small, neutral message
 format and never touches HTTP, JSON wire shapes, or vendor quirks. This file
-is the only place that knows about Gemini. Swap this file and the rest of the
+is the only place that knows about OpenAI. Swap this file and the rest of the
 harness follows a different model unchanged.
 
 Design rules:
   - Neutral in, neutral out. The loop hands us plain dicts; we hand back a
     plain dict {"text", "tool_calls", "usage"}. No wire types escape.
-  - One round-trip contract. Gemini 3 issues a `thoughtSignature` with every
-    function call and requires it echoed back verbatim on the next turn, or it
-    rejects the continuation. We store it on the tool call and replay it.
+  - Stable tool identity. OpenAI pairs each tool result to its call by
+    `tool_call_id`. We stash the id the model gave each call on the neutral
+    tool_call (its "signature") and replay it, so multi-turn tool use stays
+    valid across the round-trip.
   - Fail loud on real errors, retry the transient ones. A 429 is weather; a
     400 is a bug — only one of them deserves patience.
 """
@@ -22,88 +23,111 @@ import time
 import urllib.error
 import urllib.request
 
-API_ROOT = "https://generativelanguage.googleapis.com/v1beta/models"
-DEFAULT_MODEL = "gemini-3.1-pro-preview"
+API_BASE = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1").rstrip("/")
+API_URL = f"{API_BASE}/chat/completions"
+DEFAULT_MODEL = "gpt-4o-mini"
 
 
 def api_key():
-    """Return the API key, preferring ODYSSEUS_API_KEY over GEMINI_API_KEY.
+    """Return the API key, preferring ODYSSEUS_API_KEY over OPENAI_API_KEY.
 
     Raise RuntimeError when neither is set so misconfiguration surfaces at the
     first call rather than as an opaque 401 from the wire.
     """
-    key = os.environ.get("ODYSSEUS_API_KEY") or os.environ.get("GEMINI_API_KEY")
+    key = os.environ.get("ODYSSEUS_API_KEY") or os.environ.get("OPENAI_API_KEY")
     if not key:
         raise RuntimeError(
-            "No API key: set ODYSSEUS_API_KEY (or GEMINI_API_KEY)."
+            "No API key: set ODYSSEUS_API_KEY (or OPENAI_API_KEY)."
         )
     return key
 
 
 def _to_wire(messages):
-    """Translate neutral messages into Gemini `contents` parts.
+    """Translate neutral messages into OpenAI chat `messages`.
 
-    user -> user turn, one text part. assistant -> "model" turn: a text part
-    (when non-empty) plus one functionCall part per tool call, each echoing the
-    stored signature as `thoughtSignature` (the Gemini 3 round-trip that keeps a
-    multi-turn tool conversation valid). tool -> user turn with a functionResponse.
+    user -> user message. assistant -> assistant message carrying its text plus
+    one tool_call per neutral tool_call (arguments serialized to a JSON string,
+    the id taken from the call's stored signature). tool -> a tool message whose
+    `tool_call_id` is matched positionally to the preceding assistant's calls:
+    the loop always appends one tool result per call, in order, so a small queue
+    pairs them the way OpenAI requires.
     """
     wire = []
+    pending_ids = []
     for m in messages:
         role = m["role"]
         if role == "user":
-            wire.append({"role": "user", "parts": [{"text": m["text"]}]})
+            wire.append({"role": "user", "content": m["text"]})
         elif role == "assistant":
-            parts = [{"text": m["text"]}] if m.get("text") else []
-            for call in m.get("tool_calls", []):
-                part = {"functionCall": {"name": call["name"], "args": call["args"]}}
-                # Echo the signature Gemini gave us, or the model rejects the turn.
-                if call.get("signature"):
-                    part["thoughtSignature"] = call["signature"]
-                parts.append(part)
-            wire.append({"role": "model", "parts": parts})
+            calls = m.get("tool_calls", [])
+            msg = {"role": "assistant", "content": m.get("text") or ""}
+            pending_ids = []
+            if calls:
+                tool_calls = []
+                for i, call in enumerate(calls):
+                    cid = call.get("signature") or f"call_{i}"
+                    pending_ids.append(cid)
+                    tool_calls.append({
+                        "id": cid,
+                        "type": "function",
+                        "function": {
+                            "name": call["name"],
+                            "arguments": json.dumps(call.get("args", {})),
+                        },
+                    })
+                msg["tool_calls"] = tool_calls
+                # OpenAI wants null content when the turn is only tool calls.
+                if not m.get("text"):
+                    msg["content"] = None
+            wire.append(msg)
         elif role == "tool":
-            wire.append({"role": "user", "parts": [{"functionResponse": {
-                "name": m["name"], "response": {"result": m["text"]}}}]})
+            cid = pending_ids.pop(0) if pending_ids else "call_0"
+            wire.append({"role": "tool", "tool_call_id": cid, "content": m["text"]})
     return wire
 
 
 def complete(model, system, messages, tools):
     """Call the model once and return {"text", "tool_calls", "usage"}.
 
-    `tools` is a list of spec dicts, each shaped {"schema": ...}; we pass the
-    schemas through as functionDeclarations. Parts flagged as "thought" are
-    the model's private reasoning and are dropped from the visible text.
+    `tools` is a list of spec dicts, each shaped {"schema": ...}; we wrap each
+    schema as an OpenAI function tool. The model may answer with text, with tool
+    calls, or both; every returned call keeps its OpenAI id as its signature so
+    the next turn can pair the tool result back to it.
     """
-    body = {
-        "systemInstruction": {"parts": [{"text": system}]},
-        "contents": _to_wire(messages),
-        "generationConfig": {"temperature": 0.4, "maxOutputTokens": 65536},
-    }
+    wire = [{"role": "system", "content": system}] + _to_wire(messages)
+    body = {"model": model, "messages": wire, "temperature": 0.4}
     if tools:
-        body["tools"] = [{"functionDeclarations": [t["schema"] for t in tools]}]
+        body["tools"] = [{"type": "function", "function": t["schema"]} for t in tools]
+        body["tool_choice"] = "auto"
 
-    url = f"{API_ROOT}/{model}:generateContent?key={api_key()}"
-    data = _post(url, body)
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key()}",
+    }
+    data = _post(API_URL, body, headers)
 
-    candidates = data.get("candidates", [])
-    parts = candidates[0]["content"]["parts"] if candidates else []
-    text, tool_calls = "", []
-    for part in parts:
-        if "functionCall" in part:
-            fc = part["functionCall"]
-            tool_calls.append({"name": fc["name"], "args": fc.get("args", {}),
-                               "signature": part.get("thoughtSignature")})
-        elif "text" in part and not part.get("thought"):
-            text += part["text"]
+    choice = (data.get("choices") or [{}])[0]
+    message = choice.get("message", {})
+    text = message.get("content") or ""
+    tool_calls = []
+    for tc in message.get("tool_calls") or []:
+        fn = tc.get("function", {})
+        try:
+            args = json.loads(fn.get("arguments") or "{}")
+        except json.JSONDecodeError:
+            # A malformed argument blob is data the model can recover from, not
+            # a crash: hand the tool an empty mapping and let it report back.
+            args = {}
+        tool_calls.append({"name": fn.get("name"), "args": args,
+                           "signature": tc.get("id")})
 
-    usage = data.get("usageMetadata", {})
+    usage = data.get("usage", {})
     return {"text": text, "tool_calls": tool_calls, "usage": {
-        "input": usage.get("promptTokenCount", 0),
-        "output": usage.get("candidatesTokenCount", 0)}}
+        "input": usage.get("prompt_tokens", 0),
+        "output": usage.get("completion_tokens", 0)}}
 
 
-def _post(url, body, retries=5):
+def _post(url, body, headers, retries=5):
     """POST JSON and return the parsed response, retrying transient failures.
 
     429/500/502/503 and connection errors get exponential backoff
@@ -112,9 +136,7 @@ def _post(url, body, retries=5):
     """
     payload = json.dumps(body).encode("utf-8")
     for attempt in range(retries):
-        req = urllib.request.Request(
-            url, data=payload, headers={"Content-Type": "application/json"}
-        )
+        req = urllib.request.Request(url, data=payload, headers=headers)
         try:
             with urllib.request.urlopen(req, timeout=600) as resp:
                 return json.loads(resp.read().decode("utf-8"))
