@@ -202,4 +202,42 @@ final class LoopCommandBus {
         let data = try await api.getData(path: "/v1/suggestions/today")
         return try JSONDecoder().decode(TodayFeed.self, from: data)
     }
+
+    // -- Daily Briefing (server-layer; the unit the daily cloud-wake job runs).
+    //    Generation only drafts a reviewable briefing — it never externalizes.
+
+    /// Generate today's Daily Briefing (audio-digest transcript, editable X
+    /// post, person-to-know) for a loop. Long timeout: it runs a live web
+    /// research pass plus a model call. `force` regenerates today's briefing.
+    @discardableResult
+    func generateBriefing(loopId: String, force: Bool = false) async throws -> BriefingRunResponse {
+        var body: [String: Any] = ["loop_id": loopId]
+        if force { body["force"] = true }
+        let data = try await api.postData(path: "/v1/briefing", body: body, timeout: 180)
+        return try JSONDecoder().decode(BriefingRunResponse.self, from: data)
+    }
+
+    /// Today's stored briefing for a loop, or nil if none exists yet.
+    func getBriefing(loopId: String) async throws -> Briefing? {
+        let data = try await api.getData(path: "/v1/loops/\(loopId)/briefing")
+        return try? JSONDecoder().decode(Briefing.self, from: data)
+    }
+
+    /// The digest audio (mp3 bytes), synthesized lazily on the server.
+    func briefingAudio(loopId: String) async throws -> Data {
+        try await api.getData(path: "/v1/loops/\(loopId)/briefing/audio")
+    }
+
+    /// Rate/dismiss one briefing item ("digest"|"post"|"person"); returns the
+    /// updated briefing.
+    @discardableResult
+    func briefingFeedback(loopId: String, item: String, rating: String? = nil,
+                          dismissed: Bool? = nil) async throws -> Briefing? {
+        var body: [String: Any] = ["item": item]
+        if let rating { body["rating"] = rating }
+        if let dismissed { body["dismissed"] = dismissed }
+        let data = try await api.postData(
+            path: "/v1/loops/\(loopId)/briefing/feedback", body: body)
+        return try? JSONDecoder().decode(Briefing.self, from: data)
+    }
 }

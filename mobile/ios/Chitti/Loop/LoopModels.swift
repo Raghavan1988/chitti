@@ -127,3 +127,51 @@ struct TodayFeed: Codable {
     let count: Int
     let loops: [TodaySuggestion]
 }
+
+// -- Daily Briefing (PRD §4): audio digest + editable X post + person-to-know.
+
+/// Spoken recap of the loop's fresh research (grounded in `Briefing.sources`).
+struct BriefingDigest: Codable, Equatable {
+    var transcript: String
+    var key_points: [String]
+}
+
+/// One editable X/Twitter post the user reviews before publishing.
+struct BriefingPost: Codable, Equatable {
+    var text: String
+}
+
+/// A relevant public figure to learn from — discovered public info, kept
+/// distinct from the source-grounded digest. Never messaged automatically.
+struct BriefingPerson: Codable, Equatable {
+    var name: String
+    var platform: String
+    var profile_url: String
+    var context: String
+    var why_relevant: String
+    var engagement_tips: [String]
+}
+
+/// One loop's Daily Briefing (server sidecar). `feedback`/`dismissed` are keyed
+/// by item ("digest"|"post"|"person").
+struct Briefing: Codable, Equatable, Identifiable {
+    var loop_id: String
+    var title: String?
+    var date: String
+    var digest: BriefingDigest
+    var post: BriefingPost
+    var person: BriefingPerson
+    var sources: [String]
+    var feedback: [String: String]?
+    var dismissed: [String: Bool]?
+    var cached: Bool?
+    var has_audio: Bool?
+    var id: String { loop_id }
+}
+
+/// POST /v1/briefing response (one or all active loops).
+struct BriefingRunResponse: Codable {
+    let date: String
+    let count: Int
+    let briefings: [Briefing]
+}

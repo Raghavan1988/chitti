@@ -14,6 +14,9 @@ final class LoopStore: ObservableObject {
     @Published var isLoading = false
     @Published var isSuggesting = false
     @Published var isResearching = false
+    @Published var isBriefing = false
+    /// Today's Daily Briefing per loop id (loaded on demand in loop detail).
+    @Published var briefings: [String: Briefing] = [:]
 
     // A fresh bus per call reads current settings (base URL / key may change).
     private func bus() -> LoopCommandBus { .fromDefaults() }
@@ -133,6 +136,72 @@ final class LoopStore: ObservableObject {
     /// already-sent draft.
     func deleteDraft(loopId: String, draftId: String) async {
         await run { _ = try await self.bus().deleteDraft(loopId: loopId, draftId: draftId) }
+    }
+
+    /// Create a draft and return its id (nil on failure). Used by the Daily
+    /// Briefing "Review & post to X" flow to turn the editable post into a real
+    /// reviewable draft that goes through the standard review→externalize gate.
+    func createDraft(loopId: String, kind: String, content: String) async -> String? {
+        do {
+            let res = try await bus().addDraft(loopId: loopId, kind: kind, content: content)
+            await refresh()
+            return res.draftId
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
+    // -- Daily Briefing (in-app twin of the daily cloud-wake job; only drafts a
+    //    reviewable briefing, never externalizes) --
+
+    /// Load today's briefing for a loop (best-effort; missing → no change).
+    func loadBriefing(loopId: String) async {
+        if let b = try? await bus().getBriefing(loopId: loopId) {
+            briefings[loopId] = b
+        }
+    }
+
+    /// Generate today's Daily Briefing and cache it. `force` regenerates.
+    func generateBriefing(loopId: String, force: Bool = false) async {
+        guard !isBriefing else { return }
+        isBriefing = true
+        defer { isBriefing = false }
+        do {
+            let res = try await bus().generateBriefing(loopId: loopId, force: force)
+            if let b = res.briefings.first(where: { $0.loop_id == loopId }) {
+                briefings[loopId] = b
+            } else {
+                await loadBriefing(loopId: loopId)
+            }
+            await refresh()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    /// Fetch the digest audio (mp3), synthesized lazily server-side. nil on
+    /// failure so the UI can fall back to on-device speech.
+    func briefingAudio(loopId: String) async -> Data? {
+        do {
+            return try await bus().briefingAudio(loopId: loopId)
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Rate/dismiss one briefing item and update the cached briefing.
+    func briefingFeedback(loopId: String, item: String, rating: String? = nil,
+                          dismissed: Bool? = nil) async {
+        do {
+            if let b = try await bus().briefingFeedback(
+                loopId: loopId, item: item, rating: rating, dismissed: dismissed) {
+                briefings[loopId] = b
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 
     /// Authenticated foreground review + externalize. The user has explicitly
