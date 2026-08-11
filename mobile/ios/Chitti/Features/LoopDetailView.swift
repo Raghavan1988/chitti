@@ -26,12 +26,19 @@ struct LoopDetailView: View {
         loop?.drafts.last(where: { $0.kind == "suggestion" })
     }
 
+    // The most recent web-grounded deep-research report (key insights),
+    // surfaced in its own section like suggestions.
+    private var latestResearch: Draft? {
+        loop?.drafts.last(where: { $0.kind == "research" })
+    }
+
     var body: some View {
         Group {
             if let loop {
                 Form {
                     header(loop)
                     suggestionSection(loop)
+                    researchSection(loop)
                     actions(loop)
                     evidenceSection(loop)
                     draftsSection(loop)
@@ -93,6 +100,22 @@ struct LoopDetailView: View {
     }
 
     @ViewBuilder
+    private func researchSection(_ loop: Loop) -> some View {
+        if let research = latestResearch {
+            Section {
+                ResearchContent(text: research.content)
+                Button(role: .destructive) {
+                    Task { await store.deleteDraft(loopId: loopId, draftId: research.id) }
+                } label: {
+                    Label("Clear research", systemImage: "trash")
+                }
+            } header: {
+                Label("Key insights", systemImage: "lightbulb")
+            }
+        }
+    }
+
+    @ViewBuilder
     private func header(_ loop: Loop) -> some View {
         Section {
             Text(loop.title).font(.headline)
@@ -134,6 +157,24 @@ struct LoopDetailView: View {
                     Label("New suggestion", systemImage: "arrow.clockwise")
                 }
                 .disabled(store.isSuggesting)
+            }
+            Button {
+                Task { await store.deepResearch(loopId: loop.id) }
+            } label: {
+                if store.isResearching {
+                    HStack(spacing: 8) { ProgressView(); Text("Researching…") }
+                } else {
+                    Label("Deep research", systemImage: "magnifyingglass")
+                }
+            }
+            .disabled(store.isResearching)
+            if latestResearch != nil {
+                Button {
+                    Task { await store.deepResearch(loopId: loop.id, force: true) }
+                } label: {
+                    Label("Refresh research", systemImage: "arrow.clockwise")
+                }
+                .disabled(store.isResearching)
             }
             if loop.isPaused {
                 Button { Task { await store.resume(loopId: loop.id) } } label: {
@@ -198,9 +239,9 @@ struct LoopDetailView: View {
 
     @ViewBuilder
     private func draftsSection(_ loop: Loop) -> some View {
-        // Suggestions render in their own "Suggested actions" section above;
-        // this section is only for reviewable/sendable drafts (email/post/note).
-        let sendable = loop.drafts.filter { $0.kind != "suggestion" }
+        // Suggestions and research render in their own sections above; this
+        // section is only for reviewable/sendable drafts (email/post/note).
+        let sendable = loop.drafts.filter { $0.kind != "suggestion" && $0.kind != "research" }
         if !sendable.isEmpty {
             Section("Drafts") {
                 ForEach(sendable) { draft in
@@ -274,6 +315,64 @@ struct SuggestionContent: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 2)
+    }
+}
+
+// Renders a deep-research report: section labels (e.g. "Key insights:") as
+// small headers, "- " items as bullets, and any bare URL (the "Sources:" list)
+// as a tappable link. Non-sendable — research is for reading, not externalizing.
+struct ResearchContent: View {
+    let text: String
+
+    private var lines: [String] {
+        text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(Array(lines.enumerated()), id: \.offset) { _, raw in
+                let line = raw.trimmingCharacters(in: .whitespaces)
+                if line.isEmpty {
+                    EmptyView()
+                } else if line.hasSuffix(":") && !line.hasPrefix("-") && !line.hasPrefix("•") {
+                    Text(line.dropLast())
+                        .font(.caption).bold()
+                        .foregroundStyle(.secondary)
+                        .textCase(.uppercase)
+                        .padding(.top, 2)
+                } else if line.hasPrefix("- ") || line.hasPrefix("• ") {
+                    let item = String(line.dropFirst(2))
+                    if let url = bareURL(item) {
+                        HStack(alignment: .top, spacing: 8) {
+                            Image(systemName: "link").font(.caption).foregroundStyle(.blue)
+                            Link(displayHost(url), destination: url).font(.caption)
+                        }
+                    } else {
+                        HStack(alignment: .top, spacing: 8) {
+                            Image(systemName: "circle.fill")
+                                .font(.system(size: 5)).foregroundStyle(.blue)
+                                .padding(.top, 6)
+                            Text(item).font(.subheadline)
+                        }
+                    }
+                } else {
+                    Text(line).font(.subheadline)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 2)
+    }
+
+    private func bareURL(_ s: String) -> URL? {
+        guard s.hasPrefix("http://") || s.hasPrefix("https://") else { return nil }
+        return URL(string: s)
+    }
+
+    private func displayHost(_ url: URL) -> String {
+        guard let host = url.host else { return url.absoluteString }
+        let path = url.path
+        return host + (path == "/" || path.isEmpty ? "" : path)
     }
 }
 
