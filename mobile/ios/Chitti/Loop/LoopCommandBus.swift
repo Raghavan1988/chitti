@@ -110,6 +110,12 @@ final class LoopCommandBus {
     }
 
     @discardableResult
+    func deleteDraft(loopId: String, draftId: String,
+                     source: CommandSource = .app) async throws -> LoopCommandResult {
+        try await send("delete_draft", ["loop_id": loopId, "draft_id": draftId], source: source)
+    }
+
+    @discardableResult
     func requestReview(loopId: String, action: String, draftId: String? = nil,
                        source: CommandSource = .app) async throws -> LoopCommandResult {
         var p: [String: Any] = ["loop_id": loopId, "action": action]

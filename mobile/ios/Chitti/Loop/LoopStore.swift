@@ -112,6 +112,13 @@ final class LoopStore: ObservableObject {
         await run { _ = try await self.bus().addDraft(loopId: loopId, kind: kind, content: content) }
     }
 
+    /// Delete a single draft by id. In-app operation; local and safe — it
+    /// removes the draft record only and never externalizes or un-sends an
+    /// already-sent draft.
+    func deleteDraft(loopId: String, draftId: String) async {
+        await run { _ = try await self.bus().deleteDraft(loopId: loopId, draftId: draftId) }
+    }
+
     /// Authenticated foreground review + externalize. The user has explicitly
     /// tapped "Approve & Send" in the app, which mints a one-time review token
     /// and then externalizes. This is the ONLY path that sends — never Siri,
