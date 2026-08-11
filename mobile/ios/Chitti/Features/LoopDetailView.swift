@@ -205,7 +205,19 @@ struct LoopDetailView: View {
             Section("Drafts") {
                 ForEach(sendable) { draft in
                     VStack(alignment: .leading, spacing: 6) {
-                        Text(draft.content).font(.subheadline).lineLimit(4)
+                        HStack(alignment: .top) {
+                            Text(draft.content).font(.subheadline).lineLimit(4)
+                            Spacer(minLength: 8)
+                            Button {
+                                Task { await store.deleteDraft(loopId: loopId, draftId: draft.id) }
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .imageScale(.large)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Delete draft")
+                        }
                         HStack {
                             Badge(text: draft.kind, tint: .purple)
                             if draft.externalized {
@@ -216,6 +228,13 @@ struct LoopDetailView: View {
                                     .buttonStyle(.borderedProminent)
                                     .controlSize(.small)
                             }
+                        }
+                    }
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        Button(role: .destructive) {
+                            Task { await store.deleteDraft(loopId: loopId, draftId: draft.id) }
+                        } label: {
+                            Label("Delete", systemImage: "trash")
                         }
                     }
                 }
