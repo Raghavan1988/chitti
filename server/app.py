@@ -17,6 +17,10 @@ SignalLoop command bus + loop reads:
   POST /v1/commands                 {"type","payload","source","idempotency_key"}
   POST /v1/suggest                  {"loop_id"?: "..."}  draft today's next action(s)
   POST /v1/research                 {"loop_id"?: "..."}  web-grounded key insights (draft)
+  POST /v1/briefing                 {"loop_id"?: "..."}  daily briefing (digest+post+person)
+  GET  /v1/loops/{id}/briefing              today's Daily Briefing (or {})
+  GET  /v1/loops/{id}/briefing/audio        digest audio (mp3, synthesized lazily)
+  POST /v1/loops/{id}/briefing/feedback     {"item","rating"?,"dismissed"?}
   GET  /v1/suggestions/today        active loops with a suggestion drafted today
   GET  /v1/loops
   GET  /v1/loops/{id}
@@ -36,7 +40,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from . import auth, research, scheduler, suggester
+from . import auth, briefing, research, scheduler, suggester
 from .config import config
 from .loops import CommandError, LoopCommand, engine
 from .store import store
@@ -69,6 +73,15 @@ def _send_text(handler, status: int, text: str, content_type: str = "text/plain"
     data = text.encode("utf-8")
     handler.send_response(status)
     handler.send_header("Content-Type", f"{content_type}; charset=utf-8")
+    handler.send_header("Content-Length", str(len(data)))
+    handler.send_header("Access-Control-Allow-Origin", "*")
+    handler.end_headers()
+    handler.wfile.write(data)
+
+
+def _send_bytes(handler, status: int, data: bytes, content_type: str):
+    handler.send_response(status)
+    handler.send_header("Content-Type", content_type)
     handler.send_header("Content-Length", str(len(data)))
     handler.send_header("Access-Control-Allow-Origin", "*")
     handler.end_headers()
@@ -109,7 +122,21 @@ class ChittiHandler(BaseHTTPRequestHandler):
         if path == "/v1/reviews":
             return _send_json(self, 200, {"reviews": engine.list_reviews()})
         if path == "/v1/suggestions/today":
-            return _send_json(self, 200, suggester.todays_suggestions())
+            feed = suggester.todays_suggestions()
+            extra = briefing.todays_feed()
+            if extra:
+                have = {l.get("loop_id") for l in feed.get("loops", [])}
+                for e in extra:
+                    if e.get("loop_id") not in have:
+                        feed.setdefault("loops", []).append(e)
+                feed["count"] = len(feed.get("loops", []))
+            return _send_json(self, 200, feed)
+        if path.startswith("/v1/loops/") and path.endswith("/briefing/audio"):
+            lid = path[len("/v1/loops/") : -len("/briefing/audio")].strip("/")
+            return self._get_briefing_audio(lid)
+        if path.startswith("/v1/loops/") and path.endswith("/briefing"):
+            lid = path[len("/v1/loops/") : -len("/briefing")].strip("/")
+            return _send_json(self, 200, briefing.get_briefing(lid) or {})
         if path.startswith("/v1/loops/"):
             lid = path[len("/v1/loops/") :].strip("/")
             if "/" not in lid:
@@ -157,6 +184,13 @@ class ChittiHandler(BaseHTTPRequestHandler):
 
         if path == "/v1/research":
             return self._post_research(body)
+
+        if path == "/v1/briefing":
+            return self._post_briefing(body)
+
+        if path.startswith("/v1/loops/") and path.endswith("/briefing/feedback"):
+            lid = path[len("/v1/loops/") : -len("/briefing/feedback")].strip("/")
+            return self._post_briefing_feedback(lid, body)
 
         # /v1/sessions/{id}/messages
         if path.startswith("/v1/sessions/") and path.endswith("/messages"):
@@ -242,6 +276,49 @@ class ChittiHandler(BaseHTTPRequestHandler):
             traceback.print_exc()
             return _send_json(self, 502, {"error": f"research failed: {e}"})
         return _send_json(self, 200, result)
+
+    def _post_briefing(self, body: dict):
+        """Generate today's Daily Briefing for one or all active loops.
+
+        The server-layer unit the daily cloud-wake scheduler calls: it produces
+        the audio-digest transcript, an editable X post, and a person-to-know —
+        all reviewable, none externalized. A provider failure becomes a clean
+        502, not a crash.
+        """
+        loop_id = (body.get("loop_id") or "").strip() or None
+        force = bool(body.get("force"))
+        try:
+            result = briefing.run_active(loop_id, force=force)
+        except KeyError as e:
+            return _send_json(self, 404, {"error": f"loop not found: {e.args[0]}"})
+        except Exception as e:
+            traceback.print_exc()
+            return _send_json(self, 502, {"error": f"briefing failed: {e}"})
+        return _send_json(self, 200, result)
+
+    def _get_briefing_audio(self, lid: str):
+        """Serve today's digest audio (mp3), synthesizing it on first listen."""
+        try:
+            audio = briefing.audio_bytes(lid)
+        except Exception as e:
+            traceback.print_exc()
+            return _send_json(self, 502, {"error": f"audio failed: {e}"})
+        if not audio:
+            return _send_json(self, 404, {"error": "no briefing audio"})
+        return _send_bytes(self, 200, audio, "audio/mpeg")
+
+    def _post_briefing_feedback(self, lid: str, body: dict):
+        """Record a rating/dismissal for one briefing item (digest|post|person)."""
+        item = (body.get("item") or "").strip()
+        rating = body.get("rating")
+        dismissed = body.get("dismissed")
+        try:
+            data = briefing.record_feedback(lid, item, rating=rating, dismissed=dismissed)
+        except KeyError:
+            return _send_json(self, 404, {"error": "no briefing"})
+        except ValueError as e:
+            return _send_json(self, 400, {"error": str(e)})
+        return _send_json(self, 200, data)
         mem = Path(config.workdir) / MEMORY_FILE
         text = mem.read_text(encoding="utf-8") if mem.is_file() else ""
         return _send_json(self, 200, {"text": text, "file": MEMORY_FILE})
