@@ -144,89 +144,96 @@ struct LoopDetailView: View {
 
     @ViewBuilder
     private func digestBlock(_ b: Briefing) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Label("Audio digest", systemImage: "waveform").font(.subheadline.bold())
-                Spacer()
-                Text(b.date).font(.caption2).foregroundStyle(.secondary)
-            }
-            Button {
-                Task { await playDigest(b) }
-            } label: {
-                if audioLoading {
-                    HStack(spacing: 6) { ProgressView(); Text("Loading…") }
-                } else if appState.speech.isPlaying {
-                    Label("Stop", systemImage: "stop.fill")
-                } else {
-                    Label("Listen", systemImage: "play.fill")
+        if !(b.dismissed?["digest"] ?? false) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Label("Audio digest", systemImage: "waveform").font(.subheadline.bold())
+                    Spacer()
+                    Text(b.date).font(.caption2).foregroundStyle(.secondary)
+                    dismissButton(item: "digest")
                 }
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.small)
-            .disabled(audioLoading || b.digest.transcript.isEmpty)
+                Button {
+                    Task { await playDigest(b) }
+                } label: {
+                    if audioLoading {
+                        HStack(spacing: 6) { ProgressView(); Text("Loading…") }
+                    } else if appState.speech.isPlaying {
+                        Label("Stop", systemImage: "stop.fill")
+                    } else {
+                        Label("Listen", systemImage: "play.fill")
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                .disabled(audioLoading || b.digest.transcript.isEmpty)
 
-            if !b.digest.transcript.isEmpty {
-                Text(b.digest.transcript).font(.subheadline)
-            }
-            ForEach(Array(b.digest.key_points.enumerated()), id: \.offset) { _, p in
-                HStack(alignment: .top, spacing: 8) {
-                    Image(systemName: "circle.fill")
-                        .font(.system(size: 5)).foregroundStyle(.blue).padding(.top, 6)
-                    Text(p).font(.subheadline)
+                if !b.digest.transcript.isEmpty {
+                    Text(b.digest.transcript).font(.subheadline)
                 }
-            }
-            if !b.sources.isEmpty {
-                Text("SOURCES").font(.caption).bold().foregroundStyle(.secondary).padding(.top, 2)
-                ForEach(Array(b.sources.enumerated()), id: \.offset) { _, s in
-                    if let url = URL(string: s) {
-                        HStack(alignment: .top, spacing: 8) {
-                            Image(systemName: "link").font(.caption).foregroundStyle(.blue)
-                            Link(hostFor(url), destination: url).font(.caption)
+                ForEach(Array(b.digest.key_points.enumerated()), id: \.offset) { _, p in
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: "circle.fill")
+                            .font(.system(size: 5)).foregroundStyle(.blue).padding(.top, 6)
+                        Text(p).font(.subheadline)
+                    }
+                }
+                if !b.sources.isEmpty {
+                    Text("SOURCES").font(.caption).bold().foregroundStyle(.secondary).padding(.top, 2)
+                    ForEach(Array(b.sources.enumerated()), id: \.offset) { _, s in
+                        if let url = URL(string: s) {
+                            HStack(alignment: .top, spacing: 8) {
+                                Image(systemName: "link").font(.caption).foregroundStyle(.blue)
+                                Link(hostFor(url), destination: url).font(.caption)
+                            }
                         }
                     }
                 }
             }
-            feedbackRow(item: "digest", b: b)
+            .padding(.vertical, 2)
         }
-        .padding(.vertical, 2)
     }
 
     @ViewBuilder
     private func postBlock(_ loop: Loop, _ b: Briefing) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Label("Suggested X post", systemImage: "text.bubble").font(.subheadline.bold())
-            TextEditor(text: $briefingPostText)
-                .frame(minHeight: 92)
-                .font(.subheadline)
-                .overlay(RoundedRectangle(cornerRadius: 6).stroke(.quaternary))
-            HStack {
-                Text("\(briefingPostText.count) chars")
-                    .font(.caption2)
-                    .foregroundStyle(briefingPostText.count > 280 ? .red : .secondary)
-                Spacer()
-                Button("Reset") { briefingPostText = b.post.text }
-                    .font(.caption)
-                    .disabled(briefingPostText == b.post.text)
-            }
-            Button {
-                Task {
-                    let text = briefingPostText.trimmingCharacters(in: .whitespacesAndNewlines)
-                    guard !text.isEmpty else { return }
-                    if let id = await store.createDraft(loopId: loop.id, kind: "post", content: text),
-                       let d = store.loops.first(where: { $0.id == loop.id })?
-                           .drafts.first(where: { $0.id == id }) {
-                        reviewDraft = d
-                    }
+        if !(b.dismissed?["post"] ?? false) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Label("Suggested X post", systemImage: "text.bubble").font(.subheadline.bold())
+                    Spacer()
+                    dismissButton(item: "post")
                 }
-            } label: {
-                Label("Review & post to X", systemImage: "paperplane")
+                TextEditor(text: $briefingPostText)
+                    .frame(minHeight: 92)
+                    .font(.subheadline)
+                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(.quaternary))
+                HStack {
+                    Text("\(briefingPostText.count) chars")
+                        .font(.caption2)
+                        .foregroundStyle(briefingPostText.count > 280 ? .red : .secondary)
+                    Spacer()
+                    Button("Reset") { briefingPostText = b.post.text }
+                        .font(.caption)
+                        .disabled(briefingPostText == b.post.text)
+                }
+                Button {
+                    Task {
+                        let text = briefingPostText.trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard !text.isEmpty else { return }
+                        if let id = await store.createDraft(loopId: loop.id, kind: "post", content: text),
+                           let d = store.loops.first(where: { $0.id == loop.id })?
+                               .drafts.first(where: { $0.id == id }) {
+                            reviewDraft = d
+                        }
+                    }
+                } label: {
+                    Label("Review & post to X", systemImage: "paperplane")
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                .disabled(briefingPostText.trimmingCharacters(in: .whitespaces).isEmpty)
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.small)
-            .disabled(briefingPostText.trimmingCharacters(in: .whitespaces).isEmpty)
-            feedbackRow(item: "post", b: b)
+            .padding(.vertical, 2)
         }
-        .padding(.vertical, 2)
     }
 
     @ViewBuilder
@@ -239,6 +246,7 @@ struct LoopDetailView: View {
                         .font(.subheadline.bold())
                     Spacer()
                     Badge(text: "discovered", tint: .orange)
+                    dismissButton(item: "person")
                 }
                 Text(p.name).font(.subheadline.bold())
                 if let url = URL(string: p.profile_url), !p.profile_url.isEmpty {
@@ -266,58 +274,33 @@ struct LoopDetailView: View {
                 }
                 Text("Public professional info only — verify before engaging. SignalLoop never messages people for you.")
                     .font(.caption2).foregroundStyle(.secondary).padding(.top, 2)
-                HStack {
-                    Button {
-                        Task {
-                            var note = "Person to know for \(loop.title): \(p.name)"
-                            if !p.profile_url.isEmpty { note += " (\(p.profile_url))" }
-                            if !p.context.isEmpty { note += " — \(p.context)" }
-                            await store.remember(text: note)
-                        }
-                    } label: { Label("Save", systemImage: "bookmark") }
-                        .buttonStyle(.bordered).controlSize(.small)
-                    Spacer()
-                    Button(role: .destructive) {
-                        Task {
-                            await store.briefingFeedback(
-                                loopId: loop.id, item: "person", dismissed: true)
-                        }
-                    } label: { Label("Dismiss", systemImage: "xmark") }
-                        .buttonStyle(.bordered).controlSize(.small)
-                }
-                feedbackRow(item: "person", b: b)
+                Button {
+                    Task {
+                        var note = "Person to know for \(loop.title): \(p.name)"
+                        if !p.profile_url.isEmpty { note += " (\(p.profile_url))" }
+                        if !p.context.isEmpty { note += " — \(p.context)" }
+                        await store.remember(text: note)
+                    }
+                } label: { Label("Save", systemImage: "bookmark") }
+                    .buttonStyle(.bordered).controlSize(.small)
             }
             .padding(.vertical, 2)
         }
     }
 
+    // A per-item close/dismiss control. Local and reversible — dismissing hides
+    // the item until the next briefing (or a Refresh regenerates it).
     @ViewBuilder
-    private func feedbackRow(item: String, b: Briefing) -> some View {
-        let current = b.feedback?[item]
-        HStack(spacing: 20) {
-            Button {
-                Task {
-                    await store.briefingFeedback(
-                        loopId: loopId, item: item, rating: current == "up" ? nil : "up")
-                }
-            } label: {
-                Image(systemName: current == "up" ? "hand.thumbsup.fill" : "hand.thumbsup")
-                    .foregroundStyle(current == "up" ? Color.green : .secondary)
-            }
-            Button {
-                Task {
-                    await store.briefingFeedback(
-                        loopId: loopId, item: item, rating: current == "down" ? nil : "down")
-                }
-            } label: {
-                Image(systemName: current == "down" ? "hand.thumbsdown.fill" : "hand.thumbsdown")
-                    .foregroundStyle(current == "down" ? Color.red : .secondary)
-            }
-            Spacer()
+    private func dismissButton(item: String) -> some View {
+        Button {
+            Task { await store.briefingFeedback(loopId: loopId, item: item, dismissed: true) }
+        } label: {
+            Image(systemName: "xmark.circle.fill")
+                .imageScale(.large)
+                .foregroundStyle(.secondary)
         }
         .buttonStyle(.plain)
-        .font(.footnote)
-        .padding(.top, 4)
+        .accessibilityLabel("Dismiss \(item)")
     }
 
     private func playDigest(_ b: Briefing) async {
