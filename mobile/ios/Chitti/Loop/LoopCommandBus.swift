@@ -185,6 +185,18 @@ final class LoopCommandBus {
         return try JSONDecoder().decode(SuggestResponse.self, from: data)
     }
 
+    /// Ask the server to run web-grounded deep research for a loop and write a
+    /// reviewable ``research`` draft of key insights. Uses a longer timeout
+    /// since the live web search can take a while. `force` refreshes even if a
+    /// report already exists for today.
+    @discardableResult
+    func research(loopId: String, force: Bool = false) async throws -> ResearchResponse {
+        var body: [String: Any] = ["loop_id": loopId]
+        if force { body["force"] = true }
+        let data = try await api.postData(path: "/v1/research", body: body, timeout: 180)
+        return try JSONDecoder().decode(ResearchResponse.self, from: data)
+    }
+
     /// Active loops that received a suggestion draft today (for notifications).
     func todaysSuggestions() async throws -> TodayFeed {
         let data = try await api.getData(path: "/v1/suggestions/today")

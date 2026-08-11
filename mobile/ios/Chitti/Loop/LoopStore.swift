@@ -13,6 +13,7 @@ final class LoopStore: ObservableObject {
     @Published var errorMessage: String?
     @Published var isLoading = false
     @Published var isSuggesting = false
+    @Published var isResearching = false
 
     // A fresh bus per call reads current settings (base URL / key may change).
     private func bus() -> LoopCommandBus { .fromDefaults() }
@@ -56,11 +57,26 @@ final class LoopStore: ObservableObject {
         }
     }
 
+    /// Run web-grounded deep research for a loop and refresh so the new
+    /// `research` draft (key insights) appears. In-app twin of a cloud-wake
+    /// research job — it only drafts insights for review, never externalizes.
+    /// `force` regenerates even if a report already exists for today.
+    func deepResearch(loopId: String, force: Bool = false) async {
+        guard !isResearching else { return }
+        isResearching = true
+        defer { isResearching = false }
+        do {
+            _ = try await bus().research(loopId: loopId, force: force)
+            await refresh()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     /// Poll the "suggested today" feed and raise a local notification for any
     /// fresh suggestion the user hasn't been told about yet. Best-effort: a
     /// failure here never surfaces as a loop error.
-    func checkTodaySuggestions() async {
-        guard let feed = try? await bus().todaysSuggestions() else { return }
+    func checkTodaySuggestions() async {        guard let feed = try? await bus().todaysSuggestions() else { return }
         await NotificationManager.shared.notifyFreshSuggestions(feed)
     }
 

@@ -95,6 +95,22 @@ struct SuggestResponse: Codable {
     let suggested: [SuggestResult]
 }
 
+/// One loop's result from POST /v1/research.
+struct ResearchResult: Codable {
+    let loop_id: String
+    var draft_id: String?
+    var cached: Bool?
+    var web_used: Bool?
+    var sources: Int?
+}
+
+/// POST /v1/research response (one or all active loops).
+struct ResearchResponse: Codable {
+    let date: String
+    let count: Int
+    let researched: [ResearchResult]
+}
+
 /// One entry in GET /v1/suggestions/today (a loop suggested today).
 struct TodaySuggestion: Codable, Identifiable {
     let loop_id: String
