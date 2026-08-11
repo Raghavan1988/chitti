@@ -16,6 +16,7 @@ SignalLoop command bus + loop reads:
 
   POST /v1/commands                 {"type","payload","source","idempotency_key"}
   POST /v1/suggest                  {"loop_id"?: "..."}  draft today's next action(s)
+  POST /v1/research                 {"loop_id"?: "..."}  web-grounded key insights (draft)
   GET  /v1/suggestions/today        active loops with a suggestion drafted today
   GET  /v1/loops
   GET  /v1/loops/{id}
@@ -35,7 +36,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from . import auth, scheduler, suggester
+from . import auth, research, scheduler, suggester
 from .config import config
 from .loops import CommandError, LoopCommand, engine
 from .store import store
@@ -154,6 +155,9 @@ class ChittiHandler(BaseHTTPRequestHandler):
         if path == "/v1/suggest":
             return self._post_suggest(body)
 
+        if path == "/v1/research":
+            return self._post_research(body)
+
         # /v1/sessions/{id}/messages
         if path.startswith("/v1/sessions/") and path.endswith("/messages"):
             sid = path[len("/v1/sessions/") : -len("/messages")].strip("/")
@@ -218,6 +222,25 @@ class ChittiHandler(BaseHTTPRequestHandler):
         except Exception as e:
             traceback.print_exc()
             return _send_json(self, 502, {"error": f"suggest failed: {e}"})
+        return _send_json(self, 200, result)
+
+    def _post_research(self, body: dict):
+        """Web-grounded deep research for one or all active loops.
+
+        A server-layer capability (and future cloud-wake unit): it researches
+        the loop topic with OpenAI web search and writes a reviewable
+        ``research`` draft of key insights via the command bus — it never
+        externalizes. A model/provider failure becomes a clean 502, not a crash.
+        """
+        loop_id = (body.get("loop_id") or "").strip() or None
+        force = bool(body.get("force"))
+        try:
+            result = research.research_active(loop_id, force=force)
+        except KeyError as e:
+            return _send_json(self, 404, {"error": f"loop not found: {e.args[0]}"})
+        except Exception as e:
+            traceback.print_exc()
+            return _send_json(self, 502, {"error": f"research failed: {e}"})
         return _send_json(self, 200, result)
         mem = Path(config.workdir) / MEMORY_FILE
         text = mem.read_text(encoding="utf-8") if mem.is_file() else ""
