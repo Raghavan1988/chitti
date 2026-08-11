@@ -6,12 +6,15 @@ import Speech
 final class SpeechService: NSObject, ObservableObject {
     @Published var isRecording = false
     @Published var liveTranscript = ""
+    /// True while server-synthesized briefing audio is playing.
+    @Published var isPlaying = false
 
     private let audioEngine = AVAudioEngine()
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
     private let recognizer = SFSpeechRecognizer()
     private let synthesizer = AVSpeechSynthesizer()
+    private var player: AVAudioPlayer?
 
     func requestPermissions() async -> Bool {
         let speech = await withCheckedContinuation { (cont: CheckedContinuation<Bool, Never>) in
@@ -78,5 +81,37 @@ final class SpeechService: NSObject, ObservableObject {
         let utter = AVSpeechUtterance(string: text)
         utter.voice = AVSpeechSynthesisVoice(language: Locale.current.identifier)
         synthesizer.speak(utter)
+    }
+
+    /// Play server-synthesized digest audio (mp3). Returns false if the bytes
+    /// couldn't be decoded, so the caller can fall back to on-device `speak`.
+    @discardableResult
+    func play(_ data: Data) -> Bool {
+        do {
+            let session = AVAudioSession.sharedInstance()
+            try session.setCategory(.playback, mode: .spokenAudio, options: .duckOthers)
+            try session.setActive(true)
+            let p = try AVAudioPlayer(data: data)
+            p.delegate = self
+            player = p
+            p.play()
+            isPlaying = true
+            return true
+        } catch {
+            isPlaying = false
+            return false
+        }
+    }
+
+    func stopPlayback() {
+        player?.stop()
+        player = nil
+        isPlaying = false
+    }
+}
+
+extension SpeechService: AVAudioPlayerDelegate {
+    func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+        DispatchQueue.main.async { self.isPlaying = false }
     }
 }

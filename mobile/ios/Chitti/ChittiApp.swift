@@ -31,7 +31,7 @@ struct ContentView: View {
         }
         .task {
             appState.loadSettings()
-            NotificationManager.shared.bootstrap()
+            NotificationManager.shared.bootstrap(reminderHour: appState.settings.briefingHour)
         }
         // Re-check for fresh suggestions whenever we return to the foreground.
         .onChange(of: scenePhase) { _, phase in

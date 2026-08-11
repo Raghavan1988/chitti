@@ -61,15 +61,24 @@ SYSTEM = (
     "attributes. Do NOT fabricate a profile URL — leave profile_url empty if you "
     "are not confident it is correct. Frame engagement as authentic interaction, "
     "never spam or automation.\n"
-    "- The post is a draft the person will review before publishing; keep it in a "
-    "natural, credible first-person voice.\n\n"
+    "- The X post is PUBLIC-FACING topical thought leadership: share ONE "
+    "substantive insight or idea about the TOPIC ITSELF and pose an open, "
+    "thought-provoking question that invites discussion and deepens the reader's "
+    "understanding. Write as a curious, knowledgeable voice about the subject. It "
+    "must NOT reveal or reference the user's private goals — no job search, "
+    "applications, hiring, interviews, career ambitions, or personal plans, and "
+    "nothing about the user's own situation. Never write first-person career lines "
+    "like 'I'm applying' or 'excited to explore roles'. It is a draft the user "
+    "reviews before publishing.\n\n"
     "Respond with STRICT JSON only — no prose, no markdown, no code fences:\n"
     "{\n"
     '  "digest": {"transcript": "<90-160 word first-person spoken recap of what\'s '
     'notable today and one meaningful thing to do>", "key_points": ["<short '
     'point>", "..."]},\n'
-    '  "post": {"text": "<<=270 char X/Twitter post sharing one useful insight in '
-    'the user\'s voice; at most 2 tasteful hashtags>"},\n'
+    '  "post": {"text": "<<=270 char PUBLIC X/Twitter post about the TOPIC: one '
+    "substantive insight plus an open question that sparks discussion and builds "
+    "the reader's knowledge; no mention of the user's job search, applications, "
+    'or career ambitions; at most 2 tasteful hashtags>"},\n'
     '  "person": {"name": "<full name of a REAL, publicly-known person in this '
     'field who is NOT the user>", "platform": "linkedin|x", "profile_url": '
     '"<canonical public URL or empty>", "context": "<1-2 sentences of public '

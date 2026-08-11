@@ -6,6 +6,21 @@ struct ClientSettings: Codable, Equatable {
     var baseURL: String = "http://127.0.0.1:8787"
     var apiKey: String = "dev-key-change-me"
     var speakReplies: Bool = false
+    /// Local hour (0–23) for the morning briefing reminder.
+    var briefingHour: Int = 8
+
+    init() {}
+
+    // Tolerant decode: settings saved before a field existed (e.g. an older
+    // build without `briefingHour`) still load instead of throwing and wiping
+    // the user's saved base URL / API key.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        baseURL = try c.decodeIfPresent(String.self, forKey: .baseURL) ?? "http://127.0.0.1:8787"
+        apiKey = try c.decodeIfPresent(String.self, forKey: .apiKey) ?? "dev-key-change-me"
+        speakReplies = try c.decodeIfPresent(Bool.self, forKey: .speakReplies) ?? false
+        briefingHour = try c.decodeIfPresent(Int.self, forKey: .briefingHour) ?? 8
+    }
 }
 
 /// One row in the chat transcript.
