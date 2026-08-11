@@ -74,17 +74,18 @@ final class APIClient {
     }
 
     /// Generic JSON POST returning raw data for Codable decoding.
-    func postData(path: String, body: [String: Any]) async throws -> Data {
+    func postData(path: String, body: [String: Any], timeout: TimeInterval = 60) async throws -> Data {
         let data = try JSONSerialization.data(withJSONObject: body)
-        return try await request(path: path, method: "POST", body: data)
+        return try await request(path: path, method: "POST", body: data, timeout: timeout)
     }
 
-    private func request(path: String, method: String, body: Data?) async throws -> Data {
+    private func request(path: String, method: String, body: Data?, timeout: TimeInterval = 60) async throws -> Data {
         guard let url = URL(string: path, relativeTo: baseURL)?.absoluteURL else {
             throw APIError.badURL
         }
         var req = URLRequest(url: url)
         req.httpMethod = method
+        req.timeoutInterval = timeout
         req.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.httpBody = body
