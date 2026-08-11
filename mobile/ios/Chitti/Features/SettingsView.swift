@@ -32,6 +32,21 @@ struct SettingsView: View {
                         }
                 }
 
+                Section("Daily briefing") {
+                    Picker("Reminder time", selection: $appState.settings.briefingHour) {
+                        ForEach(0..<24, id: \.self) { h in
+                            Text(hourLabel(h)).tag(h)
+                        }
+                    }
+                    .onChange(of: appState.settings.briefingHour) { _, newHour in
+                        appState.saveSettings()
+                        NotificationManager.shared.scheduleDailyReminder(hour: newHour)
+                    }
+                    Text("Each morning SignalLoop reminds you to open today's briefing (audio digest, an editable X post, and a person to know). Generation runs on the server; open a loop to see and review it.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
                 Section("Session") {
                     LabeledContent("Session") {
                         Text(appState.sessionId?.prefix(8).description ?? "—")
@@ -78,5 +93,11 @@ struct SettingsView: View {
             }
             .navigationTitle("Settings")
         }
+    }
+
+    private func hourLabel(_ h: Int) -> String {
+        let ampm = h < 12 ? "AM" : "PM"
+        let base = h % 12 == 0 ? 12 : h % 12
+        return "\(base):00 \(ampm)"
     }
 }

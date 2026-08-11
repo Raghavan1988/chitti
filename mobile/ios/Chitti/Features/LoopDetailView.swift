@@ -8,6 +8,7 @@ import UIKit
 
 struct LoopDetailView: View {
     @EnvironmentObject var store: LoopStore
+    @EnvironmentObject var appState: AppState
     let loopId: String
 
     @State private var newEvidence = ""
@@ -16,6 +17,8 @@ struct LoopDetailView: View {
     @State private var photoItem: PhotosPickerItem?
     @State private var showCamera = false
     @State private var showClearConfirm = false
+    @State private var briefingPostText = ""
+    @State private var audioLoading = false
 
     private var loop: Loop? { store.loops.first(where: { $0.id == loopId }) }
 
@@ -37,6 +40,7 @@ struct LoopDetailView: View {
             if let loop {
                 Form {
                     header(loop)
+                    briefingSection(loop)
                     suggestionSection(loop)
                     researchSection(loop)
                     actions(loop)
@@ -49,7 +53,13 @@ struct LoopDetailView: View {
         }
         .navigationTitle(loop?.domainEnum.label ?? "Loop")
         .navigationBarTitleDisplayMode(.inline)
-        .task { await store.refresh() }
+        .task {
+            await store.refresh()
+            await store.loadBriefing(loopId: loopId)
+            if briefingPostText.isEmpty, let t = store.briefings[loopId]?.post.text {
+                briefingPostText = t
+            }
+        }
         .sheet(isPresented: $showingCompose) {
             ComposeDraftSheet(loopId: loopId).environmentObject(store)
         }
@@ -81,6 +91,253 @@ struct LoopDetailView: View {
         } message: {
             Text("Removes the AI suggestions and resets today's suggested action. You can generate a new one anytime.")
         }
+    }
+
+    // -- Daily Briefing (PRD §4): audio digest + editable X post + person.
+
+    @ViewBuilder
+    private func briefingSection(_ loop: Loop) -> some View {
+        Section {
+            if let b = store.briefings[loopId] {
+                briefingBody(loop, b)
+            } else {
+                Button {
+                    Task {
+                        await store.generateBriefing(loopId: loop.id)
+                        if let t = store.briefings[loopId]?.post.text { briefingPostText = t }
+                    }
+                } label: {
+                    if store.isBriefing {
+                        HStack(spacing: 8) { ProgressView(); Text("Preparing briefing…") }
+                    } else {
+                        Label("Generate today's briefing", systemImage: "sun.max")
+                    }
+                }
+                .disabled(store.isBriefing)
+                Text("A morning digest you can listen to, an editable X post, and a person worth knowing — grounded in fresh research.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        } header: {
+            Label("Daily Briefing", systemImage: "sunrise")
+        }
+    }
+
+    @ViewBuilder
+    private func briefingBody(_ loop: Loop, _ b: Briefing) -> some View {
+        digestBlock(b)
+        postBlock(loop, b)
+        personBlock(loop, b)
+        Button {
+            Task {
+                await store.generateBriefing(loopId: loop.id, force: true)
+                if let t = store.briefings[loopId]?.post.text { briefingPostText = t }
+            }
+        } label: {
+            if store.isBriefing {
+                HStack(spacing: 8) { ProgressView(); Text("Refreshing…") }
+            } else {
+                Label("Refresh briefing", systemImage: "arrow.clockwise")
+            }
+        }
+        .disabled(store.isBriefing)
+    }
+
+    @ViewBuilder
+    private func digestBlock(_ b: Briefing) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Label("Audio digest", systemImage: "waveform").font(.subheadline.bold())
+                Spacer()
+                Text(b.date).font(.caption2).foregroundStyle(.secondary)
+            }
+            Button {
+                Task { await playDigest(b) }
+            } label: {
+                if audioLoading {
+                    HStack(spacing: 6) { ProgressView(); Text("Loading…") }
+                } else if appState.speech.isPlaying {
+                    Label("Stop", systemImage: "stop.fill")
+                } else {
+                    Label("Listen", systemImage: "play.fill")
+                }
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
+            .disabled(audioLoading || b.digest.transcript.isEmpty)
+
+            if !b.digest.transcript.isEmpty {
+                Text(b.digest.transcript).font(.subheadline)
+            }
+            ForEach(Array(b.digest.key_points.enumerated()), id: \.offset) { _, p in
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "circle.fill")
+                        .font(.system(size: 5)).foregroundStyle(.blue).padding(.top, 6)
+                    Text(p).font(.subheadline)
+                }
+            }
+            if !b.sources.isEmpty {
+                Text("SOURCES").font(.caption).bold().foregroundStyle(.secondary).padding(.top, 2)
+                ForEach(Array(b.sources.enumerated()), id: \.offset) { _, s in
+                    if let url = URL(string: s) {
+                        HStack(alignment: .top, spacing: 8) {
+                            Image(systemName: "link").font(.caption).foregroundStyle(.blue)
+                            Link(hostFor(url), destination: url).font(.caption)
+                        }
+                    }
+                }
+            }
+            feedbackRow(item: "digest", b: b)
+        }
+        .padding(.vertical, 2)
+    }
+
+    @ViewBuilder
+    private func postBlock(_ loop: Loop, _ b: Briefing) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("Suggested X post", systemImage: "text.bubble").font(.subheadline.bold())
+            TextEditor(text: $briefingPostText)
+                .frame(minHeight: 92)
+                .font(.subheadline)
+                .overlay(RoundedRectangle(cornerRadius: 6).stroke(.quaternary))
+            HStack {
+                Text("\(briefingPostText.count) chars")
+                    .font(.caption2)
+                    .foregroundStyle(briefingPostText.count > 280 ? .red : .secondary)
+                Spacer()
+                Button("Reset") { briefingPostText = b.post.text }
+                    .font(.caption)
+                    .disabled(briefingPostText == b.post.text)
+            }
+            Button {
+                Task {
+                    let text = briefingPostText.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !text.isEmpty else { return }
+                    if let id = await store.createDraft(loopId: loop.id, kind: "post", content: text),
+                       let d = store.loops.first(where: { $0.id == loop.id })?
+                           .drafts.first(where: { $0.id == id }) {
+                        reviewDraft = d
+                    }
+                }
+            } label: {
+                Label("Review & post to X", systemImage: "paperplane")
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
+            .disabled(briefingPostText.trimmingCharacters(in: .whitespaces).isEmpty)
+            feedbackRow(item: "post", b: b)
+        }
+        .padding(.vertical, 2)
+    }
+
+    @ViewBuilder
+    private func personBlock(_ loop: Loop, _ b: Briefing) -> some View {
+        let p = b.person
+        if !(b.dismissed?["person"] ?? false) && !p.name.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Label("Person to know", systemImage: "person.crop.circle")
+                        .font(.subheadline.bold())
+                    Spacer()
+                    Badge(text: "discovered", tint: .orange)
+                }
+                Text(p.name).font(.subheadline.bold())
+                if let url = URL(string: p.profile_url), !p.profile_url.isEmpty {
+                    Link(destination: url) {
+                        Label(p.platform.isEmpty ? "profile" : p.platform.uppercased(),
+                              systemImage: "link").font(.caption)
+                    }
+                } else if !p.platform.isEmpty {
+                    Text(p.platform.uppercased()).font(.caption).foregroundStyle(.secondary)
+                }
+                if !p.context.isEmpty { Text(p.context).font(.subheadline) }
+                if !p.why_relevant.isEmpty {
+                    Text("Why relevant: \(p.why_relevant)")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                if !p.engagement_tips.isEmpty {
+                    Text("HOW TO ENGAGE").font(.caption).bold()
+                        .foregroundStyle(.secondary).padding(.top, 2)
+                    ForEach(Array(p.engagement_tips.enumerated()), id: \.offset) { _, t in
+                        HStack(alignment: .top, spacing: 8) {
+                            Image(systemName: "hand.wave").font(.caption).foregroundStyle(.blue)
+                            Text(t).font(.caption)
+                        }
+                    }
+                }
+                Text("Public professional info only — verify before engaging. SignalLoop never messages people for you.")
+                    .font(.caption2).foregroundStyle(.secondary).padding(.top, 2)
+                HStack {
+                    Button {
+                        Task {
+                            var note = "Person to know for \(loop.title): \(p.name)"
+                            if !p.profile_url.isEmpty { note += " (\(p.profile_url))" }
+                            if !p.context.isEmpty { note += " — \(p.context)" }
+                            await store.remember(text: note)
+                        }
+                    } label: { Label("Save", systemImage: "bookmark") }
+                        .buttonStyle(.bordered).controlSize(.small)
+                    Spacer()
+                    Button(role: .destructive) {
+                        Task {
+                            await store.briefingFeedback(
+                                loopId: loop.id, item: "person", dismissed: true)
+                        }
+                    } label: { Label("Dismiss", systemImage: "xmark") }
+                        .buttonStyle(.bordered).controlSize(.small)
+                }
+                feedbackRow(item: "person", b: b)
+            }
+            .padding(.vertical, 2)
+        }
+    }
+
+    @ViewBuilder
+    private func feedbackRow(item: String, b: Briefing) -> some View {
+        let current = b.feedback?[item]
+        HStack(spacing: 20) {
+            Button {
+                Task {
+                    await store.briefingFeedback(
+                        loopId: loopId, item: item, rating: current == "up" ? nil : "up")
+                }
+            } label: {
+                Image(systemName: current == "up" ? "hand.thumbsup.fill" : "hand.thumbsup")
+                    .foregroundStyle(current == "up" ? Color.green : .secondary)
+            }
+            Button {
+                Task {
+                    await store.briefingFeedback(
+                        loopId: loopId, item: item, rating: current == "down" ? nil : "down")
+                }
+            } label: {
+                Image(systemName: current == "down" ? "hand.thumbsdown.fill" : "hand.thumbsdown")
+                    .foregroundStyle(current == "down" ? Color.red : .secondary)
+            }
+            Spacer()
+        }
+        .buttonStyle(.plain)
+        .font(.footnote)
+        .padding(.top, 4)
+    }
+
+    private func playDigest(_ b: Briefing) async {
+        if appState.speech.isPlaying {
+            appState.speech.stopPlayback()
+            return
+        }
+        audioLoading = true
+        defer { audioLoading = false }
+        if let data = await store.briefingAudio(loopId: loopId), appState.speech.play(data) {
+            return
+        }
+        // Fall back to on-device speech if the server audio is unavailable.
+        appState.speech.speak(b.digest.transcript)
+    }
+
+    private func hostFor(_ url: URL) -> String {
+        guard let host = url.host else { return url.absoluteString }
+        let path = url.path
+        return host + (path == "/" || path.isEmpty ? "" : path)
     }
 
     @ViewBuilder
