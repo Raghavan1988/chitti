@@ -47,6 +47,7 @@ COMMAND_TYPES = {
     "update_loop",
     "log_evidence",
     "add_draft",
+    "delete_draft",
     "pause",
     "resume",
     "approve_plan",
@@ -402,6 +403,24 @@ class LoopEngine:
         loop.drafts.append(draft)
         self._touch(loop, "draft_added", source, draft_id=draft["id"], kind=kind)
         return {"ok": True, "loop_id": loop.id, "draft_id": draft["id"]}
+
+    def _cmd_delete_draft(self, payload: dict, source: str) -> dict:
+        """Remove a single draft by id. Local and safe: deleting the local
+        draft record never externalizes and never un-sends an already-sent
+        draft — it only forgets the draft in SignalLoop. Idempotent-friendly:
+        a repeat/double-tap for an already-gone draft returns ``removed: 0``
+        rather than erroring.
+        """
+        loop = self._require_loop(payload)
+        draft_id = payload.get("draft_id")
+        if not draft_id:
+            raise CommandError("draft_id is required for delete_draft")
+        before = len(loop.drafts)
+        loop.drafts = [d for d in loop.drafts if d.get("id") != draft_id]
+        removed = before - len(loop.drafts)
+        if removed:
+            self._touch(loop, "draft_deleted", source, draft_id=draft_id)
+        return {"ok": True, "loop_id": loop.id, "draft_id": draft_id, "removed": removed}
 
     def _cmd_pause(self, payload: dict, source: str) -> dict:
         loop = self._require_loop(payload)
