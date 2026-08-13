@@ -47,20 +47,6 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                Section("Session") {
-                    LabeledContent("Session") {
-                        Text(appState.sessionId?.prefix(8).description ?? "—")
-                            .foregroundStyle(.secondary)
-                    }
-                    Button("Reset session", role: .destructive) {
-                        appState.stream.stop()
-                        appState.sessionId = nil
-                        appState.items.removeAll()
-                        appState.isRunningTurn = false
-                        appState.statusLine = "Session cleared"
-                    }
-                }
-
                 Section("Memory (server CHITTI.md)") {
                     if memoryPreview.isEmpty {
                         Text("Tap refresh to load")

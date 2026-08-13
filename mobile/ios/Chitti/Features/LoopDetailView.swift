@@ -451,16 +451,23 @@ struct LoopDetailView: View {
                     Text(ev.kind).font(.caption2).foregroundStyle(.secondary)
                 }
             }
-            HStack {
-                TextField("Log evidence…", text: $newEvidence, axis: .vertical)
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Additional context")
+                    .font(.caption).foregroundStyle(.secondary)
+                TextEditor(text: $newEvidence)
+                    .frame(minHeight: 84)
+                    .font(.subheadline)
+                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(.quaternary))
                 Button {
                     let text = newEvidence.trimmingCharacters(in: .whitespacesAndNewlines)
                     guard !text.isEmpty else { return }
                     newEvidence = ""
                     Task { await store.logEvidence(loopId: loop.id, text: text) }
                 } label: {
-                    Image(systemName: "plus.circle.fill")
+                    Label("Add context", systemImage: "plus.circle.fill")
                 }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
                 .disabled(newEvidence.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
             HStack {
