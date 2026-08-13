@@ -1,0 +1,56 @@
+# PRD: SignalLoop
+
+## Overview
+
+**SignalLoop** is a topic-based, continuously updated workspace that helps users stay informed, build expertise, and grow their online presence. A user creates a SignalLoop around a topic, adds sources over time, chats with an AI grounded in those sources, and receives a daily content-and-networking briefing each morning.
+
+## Problem
+
+Users who want to build authority in a subject spend significant time gathering information, extracting insights, creating social content, and identifying relevant people to engage with. Their research is fragmented and rarely turns into a consistent daily habit.
+
+## Goals
+
+- Make it simple to maintain a living research loop for a topic.
+- Turn source material into useful daily audio and social content.
+- Help users discover relevant people and engage with them thoughtfully.
+- Keep generated insights traceable to the loop’s sources where possible.
+
+## User Experience
+
+1. The user creates a SignalLoop by entering a title, topic description, and initial sources, including links, documents, videos, or pasted text.
+2. The user can add, remove, or refresh sources whenever needed.
+3. The user chats with the SignalLoop to ask questions, synthesize ideas, compare sources, and draft content. Responses cite supporting sources.
+4. Every morning, the SignalLoop generates a **Daily Briefing** containing:
+   - An audio podcast digest of notable source updates and key ideas.
+   - One editable tweet/X post designed to share a useful insight and strengthen the user’s voice on the topic.
+   - A “person to know” profile: a relevant person found on LinkedIn or X/Twitter, including public context, recent themes, why they are relevant, and recommended ways to engage authentically.
+5. The user can listen, edit or copy the post, save the person, dismiss recommendations, or provide feedback to improve future briefings.
+
+## Requirements
+
+| Area | Requirement |
+|---|---|
+| SignalLoop creation | Create a named SignalLoop with a topic description and one or more initial sources |
+| Source management | Add sources on demand; show processing status, source metadata, and retrieval/citation support |
+| Grounded chat | Enable conversational Q&A and synthesis based on SignalLoop sources, with citations |
+| Daily scheduling | Deliver one Daily Briefing each morning at a user-selected local time |
+| Audio digest | Generate a concise, listenable audio recap with a transcript and cited source references |
+| Social post | Generate one topic-relevant, editable tweet/X post in the user’s selected tone |
+| People discovery | Identify one relevant public LinkedIn or X/Twitter profile and provide engagement intelligence based on publicly available information |
+| Feedback | Let users rate or dismiss each briefing item; use feedback to tune relevance and tone |
+
+## Trust and Guardrails
+
+- Clearly distinguish source-grounded claims from externally discovered public-profile information.
+- Cite source material in chat, transcripts, and briefing summaries.
+- Use only public professional information for people discovery; do not infer sensitive attributes or recommend spammy outreach.
+- Frame engagement recommendations around genuine interaction, not automated or deceptive tactics.
+- Require user review before a post is published; SignalLoop does not auto-post or auto-message people.
+
+## Success Metrics
+
+- Weekly active SignalLoops and source additions per SignalLoop.
+- Daily Briefing open/listen rate and podcast completion rate.
+- Percentage of generated social posts copied, edited, or published by users.
+- Saves and engagement actions on recommended people.
+- User-rated relevance of the daily digest, post, and person recommendation.
