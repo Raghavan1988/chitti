@@ -24,8 +24,6 @@ struct ContentView: View {
         TabView {
             LoopListView()
                 .tabItem { Label("Loops", systemImage: "arrow.triangle.2.circlepath") }
-            ChatView()
-                .tabItem { Label("Chat", systemImage: "bubble.left.and.bubble.right") }
             SettingsView()
                 .tabItem { Label("Settings", systemImage: "gear") }
         }
