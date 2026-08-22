@@ -57,6 +57,19 @@ def _json_body(handler) -> dict:
     return json.loads(raw.decode("utf-8"))
 
 
+def _between(path: str, prefix: str, suffix: str = "") -> str:
+    """Extract the id segment of a request path between a prefix and suffix.
+
+    ``_between("/v1/loops/abc/briefing", "/v1/loops/", "/briefing")`` → ``"abc"``.
+    Centralizes the slice arithmetic the route table used to repeat inline,
+    where an off-by-one ``len(...)`` was easy to introduce.
+    """
+    inner = path[len(prefix):]
+    if suffix:
+        inner = inner[: -len(suffix)]
+    return inner.strip("/")
+
+
 def _send_json(handler, status: int, body: dict | list):
     data = json.dumps(body, ensure_ascii=False).encode("utf-8")
     handler.send_response(status)
@@ -132,23 +145,23 @@ class ChittiHandler(BaseHTTPRequestHandler):
                 feed["count"] = len(feed.get("loops", []))
             return _send_json(self, 200, feed)
         if path.startswith("/v1/loops/") and path.endswith("/briefing/audio"):
-            lid = path[len("/v1/loops/") : -len("/briefing/audio")].strip("/")
+            lid = _between(path, "/v1/loops/", "/briefing/audio")
             return self._get_briefing_audio(lid)
         if path.startswith("/v1/loops/") and path.endswith("/briefing"):
-            lid = path[len("/v1/loops/") : -len("/briefing")].strip("/")
+            lid = _between(path, "/v1/loops/", "/briefing")
             return _send_json(self, 200, briefing.get_briefing(lid) or {})
         if path.startswith("/v1/loops/"):
-            lid = path[len("/v1/loops/") :].strip("/")
+            lid = _between(path, "/v1/loops/")
             if "/" not in lid:
                 loop = engine.get_loop(lid)
                 if not loop:
                     return _send_json(self, 404, {"error": "loop not found"})
                 return _send_json(self, 200, loop)
         if path.startswith("/v1/sessions/") and path.endswith("/events"):
-            sid = path[len("/v1/sessions/") : -len("/events")].strip("/")
+            sid = _between(path, "/v1/sessions/", "/events")
             return self._sse(sid)
         if path.startswith("/v1/sessions/"):
-            sid = path[len("/v1/sessions/") :].strip("/")
+            sid = _between(path, "/v1/sessions/")
             if "/" not in sid:
                 return self._get_session(sid)
         return _send_json(self, 404, {"error": "not found", "path": path})
@@ -189,12 +202,12 @@ class ChittiHandler(BaseHTTPRequestHandler):
             return self._post_briefing(body)
 
         if path.startswith("/v1/loops/") and path.endswith("/briefing/feedback"):
-            lid = path[len("/v1/loops/") : -len("/briefing/feedback")].strip("/")
+            lid = _between(path, "/v1/loops/", "/briefing/feedback")
             return self._post_briefing_feedback(lid, body)
 
         # /v1/sessions/{id}/messages
         if path.startswith("/v1/sessions/") and path.endswith("/messages"):
-            sid = path[len("/v1/sessions/") : -len("/messages")].strip("/")
+            sid = _between(path, "/v1/sessions/", "/messages")
             return self._post_message(sid, body)
 
         # /v1/sessions/{id}/approvals/{aid}
@@ -319,6 +332,9 @@ class ChittiHandler(BaseHTTPRequestHandler):
         except ValueError as e:
             return _send_json(self, 400, {"error": str(e)})
         return _send_json(self, 200, data)
+
+    def _get_memory(self):
+        """Return the global memory file's text (durable prefs/facts)."""
         mem = Path(config.workdir) / MEMORY_FILE
         text = mem.read_text(encoding="utf-8") if mem.is_file() else ""
         return _send_json(self, 200, {"text": text, "file": MEMORY_FILE})
