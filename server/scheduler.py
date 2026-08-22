@@ -20,6 +20,9 @@ Env:
   CHITTI_BRIEFING_HOUR     local hour-of-day to run, 0-23 (default 8;
                            falls back to CHITTI_SUGGEST_HOUR for compatibility)
   CHITTI_SUGGEST_ON_START  "1" to also run once immediately (dev/test hook)
+  CHITTI_SCOUT_ENABLED     "1" to also draft engagement candidates
+                           (connect/comment) per loop in the daily wake
+                           (default off)
 """
 
 from __future__ import annotations
@@ -28,7 +31,7 @@ import os
 import threading
 from datetime import datetime
 
-from . import briefing
+from . import briefing, scout
 
 
 def _flag(name: str, default: str = "0") -> bool:
@@ -44,6 +47,7 @@ class SuggestScheduler:
         enabled: bool | None = None,
         on_start: bool | None = None,
         interval_s: int = 60,
+        scout_enabled: bool | None = None,
     ):
         self.hour = (
             int(os.environ.get("CHITTI_BRIEFING_HOUR",
@@ -53,6 +57,9 @@ class SuggestScheduler:
         )
         self.enabled = _flag("CHITTI_SUGGEST_ENABLED") if enabled is None else enabled
         self.on_start = _flag("CHITTI_SUGGEST_ON_START") if on_start is None else on_start
+        self.scout_enabled = (
+            _flag("CHITTI_SCOUT_ENABLED") if scout_enabled is None else scout_enabled
+        )
         self.interval_s = interval_s
         self._last_run_date: str | None = None
         self._thread: threading.Thread | None = None
@@ -66,6 +73,8 @@ class SuggestScheduler:
             )
             return
         print(f"  briefing scheduler: enabled (daily ~{self.hour:02d}:00 local)")
+        if self.scout_enabled:
+            print("  engagement scout: enabled (drafts connect/comment per loop)")
         self._thread = threading.Thread(
             target=self._run, name="briefing-scheduler", daemon=True
         )
@@ -94,6 +103,16 @@ class SuggestScheduler:
                 return {"skipped": "before-hour", "date": today}
         try:
             result = briefing.run_active(force=force)
+            if self.scout_enabled:
+                try:
+                    s = scout.scout_active(source="cloud_wake", force=force)
+                    print(
+                        f"[briefing-scheduler] {today}: scouted "
+                        f"{s.get('count', 0)} active loop(s)"
+                    )
+                except Exception as e:
+                    # Scouting is best-effort; never let it kill the wake.
+                    print(f"[briefing-scheduler] {today}: scout FAILED: {e}")
             self._last_run_date = today
             print(
                 f"[briefing-scheduler] {today}: briefed "
