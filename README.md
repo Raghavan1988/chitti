@@ -7,6 +7,7 @@
 | **SignalLoop** | **Product north star** — career + life multi-day **loops**; Siri as optional adapter |
 
 An *agent* is a conversation that runs itself: call a model, run tools, feed results back, repeat until the model answers in plain text.
+uses twitter and linkedin to search for right information
 
 **Continue on a new Mac?** → start here: **[`CONTINUE_ON_MAC.md`](CONTINUE_ON_MAC.md)**  
 **Product plan:** [`plan.md`](plan.md) · **Agent rules:** [`AGENTS.md`](AGENTS.md)
