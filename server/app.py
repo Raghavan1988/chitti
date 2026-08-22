@@ -17,6 +17,7 @@ SignalLoop command bus + loop reads:
   POST /v1/commands                 {"type","payload","source","idempotency_key"}
   POST /v1/suggest                  {"loop_id"?: "..."}  draft today's next action(s)
   POST /v1/research                 {"loop_id"?: "..."}  web-grounded key insights (draft)
+  POST /v1/scout                    {"loop_id"?,"platform"?}  draft connect/comment actions
   POST /v1/briefing                 {"loop_id"?: "..."}  daily briefing (digest+post+person)
   GET  /v1/loops/{id}/briefing              today's Daily Briefing (or {})
   GET  /v1/loops/{id}/briefing/audio        digest audio (mp3, synthesized lazily)
@@ -40,7 +41,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from . import auth, briefing, research, scheduler, suggester
+from . import auth, briefing, research, scheduler, scout, suggester
 from .config import config
 from .loops import CommandError, LoopCommand, engine
 from .store import store
@@ -198,6 +199,9 @@ class ChittiHandler(BaseHTTPRequestHandler):
         if path == "/v1/research":
             return self._post_research(body)
 
+        if path == "/v1/scout":
+            return self._post_scout(body)
+
         if path == "/v1/briefing":
             return self._post_briefing(body)
 
@@ -288,6 +292,27 @@ class ChittiHandler(BaseHTTPRequestHandler):
         except Exception as e:
             traceback.print_exc()
             return _send_json(self, 502, {"error": f"research failed: {e}"})
+        return _send_json(self, 200, result)
+
+    def _post_scout(self, body: dict):
+        """Discover people/posts to engage and draft connect/comment actions.
+
+        A server-layer capability (and cloud-wake unit): for one or all active
+        loops it asks a connector for candidates, scores them against the loop,
+        and writes reviewable ``connect``/``comment`` drafts via the command
+        bus. It never externalizes — connecting or commenting stays gated behind
+        an authenticated-review token. A connector failure becomes a clean 502.
+        """
+        loop_id = (body.get("loop_id") or "").strip() or None
+        platform = (body.get("platform") or "").strip() or None
+        force = bool(body.get("force"))
+        try:
+            result = scout.scout_active(loop_id, force=force, platform=platform)
+        except KeyError as e:
+            return _send_json(self, 404, {"error": f"loop not found: {e.args[0]}"})
+        except Exception as e:
+            traceback.print_exc()
+            return _send_json(self, 502, {"error": f"scout failed: {e}"})
         return _send_json(self, 200, result)
 
     def _post_briefing(self, body: dict):
